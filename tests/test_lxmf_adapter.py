@@ -665,6 +665,45 @@ class TestFakeLxmfAdapterMakeTextEvent:
         assert event.payload["title"] == "Subject"
 
 
+class TestFakeLxmfAdapterMakeEvent:
+    """make_event creates minimal canonical events (matrix-compatible)."""
+
+    def test_make_event_creates_canonical_event(self) -> None:
+        adapter = FakeLxmfAdapter()
+        event = adapter.make_event(text="ping")
+        assert isinstance(event, CanonicalEvent)
+        assert event.payload["body"] == "ping"
+
+    def test_make_event_passes_event_kind_through(self) -> None:
+        adapter = FakeLxmfAdapter()
+        event = adapter.make_event(text="ping", event_kind=EventKind.MESSAGE_TEXT)
+        assert event.event_kind == EventKind.MESSAGE_TEXT
+
+    def test_make_event_sets_configured_source_ids(self) -> None:
+        adapter = FakeLxmfAdapter(adapter_id="lxmf-1")
+        event = adapter.make_event(text="ping")
+        assert event.source_adapter == "lxmf-1"
+        assert event.source_transport_id == "lxmf-1"
+
+    def test_make_event_defaults_to_default_peer_hash_channel(self) -> None:
+        adapter = FakeLxmfAdapter()
+        event = adapter.make_event(text="ping")
+        # Same channel the codec derives from make_text_event's default
+        # source hash ("ab" * 16).
+        assert event.source_channel_id == "ab" * 16
+        assert event.source_channel_id == adapter.make_text_event().source_channel_id
+
+    def test_make_event_with_channel_override(self) -> None:
+        adapter = FakeLxmfAdapter()
+        event = adapter.make_event(text="ping", channel="ef" * 16)
+        assert event.source_channel_id == "ef" * 16
+
+    def test_make_event_with_extra_payload(self) -> None:
+        adapter = FakeLxmfAdapter()
+        event = adapter.make_event(text="ping", custom_field="value")
+        assert event.payload["custom_field"] == "value"
+
+
 # ===================================================================
 # Task scheduling
 # ===================================================================

@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from medre.adapters.lxmf.codec import LxmfCodec
@@ -46,6 +48,8 @@ from medre.core.contracts.adapter import (
     AdapterSendError,
 )
 from medre.core.events.canonical import CanonicalEvent
+from medre.core.events.kinds import EventKind
+from medre.core.events.metadata import EventMetadata
 from medre.core.rendering.renderer import RenderingResult
 
 _logger = logging.getLogger(__name__)
@@ -384,6 +388,54 @@ class FakeLxmfAdapter(AdapterContract):
         _trim(self.inbound_events)
 
     # -- Test helpers -------------------------------------------------------
+
+    def make_event(
+        self,
+        text: str = "hello",
+        event_kind: str = EventKind.MESSAGE_CREATED,
+        channel: str | None = None,
+        **extra_payload: object,
+    ) -> CanonicalEvent:
+        """Create a minimal :class:`CanonicalEvent` for testing.
+
+        Signature-compatible with
+        :meth:`~medre.adapters.matrix.fakes.matrix.FakeMatrixAdapter.make_event`
+        so the core smoke runtime can inject via any fake adapter.
+
+        Parameters
+        ----------
+        text:
+            Body text for the event payload.
+        event_kind:
+            The event kind string.
+        channel:
+            Override the default channel.  LXMF has no channel concept;
+            the codec keys inbound events on the peer's source hash, so
+            this defaults to the same ``"ab" * 16`` peer hash
+            :meth:`make_text_event` uses.
+        **extra_payload:
+            Additional keys merged into the payload dict.
+
+        Returns
+        -------
+        CanonicalEvent
+            A ready-to-publish canonical event.
+        """
+        ch = channel if channel is not None else "ab" * 16
+        return CanonicalEvent(
+            event_id=str(uuid.uuid4()),
+            event_kind=event_kind,
+            schema_version=1,
+            timestamp=datetime.now(timezone.utc),
+            source_adapter=self.adapter_id,
+            source_transport_id=self.adapter_id,
+            source_channel_id=ch,
+            parent_event_id=None,
+            lineage=(),
+            relations=(),
+            payload={"body": text, **extra_payload},
+            metadata=EventMetadata(),
+        )
 
     def make_text_event(
         self,
