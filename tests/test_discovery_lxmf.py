@@ -13,3 +13,14 @@ def test_adapter_entry_point() -> None:
     assert spec.adapter.module == "medre.adapters.lxmf.adapter"
     assert spec.config.module == "medre.config.adapters.lxmf"
     assert get_adapter_spec("lxmf") == spec
+
+
+def test_declared_sdk_import_names_match_actual_module_spelling() -> None:
+    """The import vocabulary must reflect LXMF's uppercase module name."""
+    from medre.adapters.lxmf.plugin import adapter_spec
+
+    spec = adapter_spec()
+    assert spec.import_names == ("LXMF", "RNS")
+    assert spec.dependency_probe is not None
+    assert spec.dependency_probe.module == "medre.adapters.lxmf.compat"
+    assert spec.dependency_probe.name == "HAS_LXMF"

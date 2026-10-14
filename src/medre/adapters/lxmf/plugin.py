@@ -25,7 +25,7 @@ def adapter_spec() -> AdapterSpec:
         ),
         dependency_probe=SymbolRef("medre.adapters.lxmf.compat", "HAS_LXMF"),
         distribution="lxmf",
-        import_names=("lxmf", "RNS"),
+        import_names=("LXMF", "RNS"),
         sdk_import_roots=("RNS", "LXMF", "lxmf"),
         native_namespace_reader=SymbolRef(
             "medre.adapters.lxmf.event_shape", "lxmf_namespace"
