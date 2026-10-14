@@ -305,7 +305,7 @@ class LxmfAdapter(AdapterContract):
                 self.ctx = None
                 self._start_time = None
                 raise LxmfConnectionError(
-                    "lxmf/RNS not installed; pip install 'medre[lxmf]'. "
+                    "lxmf/RNS not installed; pip install 'medre-adapter-lxmf'. "
                     f"connection_type={self._config.connection_type!r}"
                 )
 

@@ -934,7 +934,7 @@ class LxmfSession:
         """Create real Reticulum/LXMF objects and subscribe to events."""
         if not HAS_LXMF:
             raise LxmfConnectionError(
-                "lxmf/RNS not installed; pip install 'medre[lxmf]' "
+                "lxmf/RNS not installed; pip install 'medre-adapter-lxmf' "
                 "or use connection_type='fake'"
             )
 

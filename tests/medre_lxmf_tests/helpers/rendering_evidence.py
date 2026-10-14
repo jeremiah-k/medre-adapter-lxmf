@@ -1,0 +1,85 @@
+"""Shared helper factories for rendering evidence tests.
+
+Provides reusable factory functions for creating canonical events,
+rendering contexts, and adapter renderers used across the rendering
+evidence test suite.  Import from this module instead of duplicating
+factories in each test file.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING
+
+from medre.core.events import (
+    CanonicalEvent,
+    EventMetadata,
+    EventRelation,
+)
+from medre.core.rendering.renderer import (
+    RenderingContext,
+)
+from medre.core.routing.models import RouteDestination
+
+if TYPE_CHECKING:
+    from medre.adapters.lxmf.renderer import LxmfRenderer
+
+
+if TYPE_CHECKING:
+    from medre.adapters.lxmf.renderer import LxmfRenderer
+
+
+if TYPE_CHECKING:
+    from medre.adapters.lxmf.renderer import LxmfRenderer
+
+
+def make_event(
+    event_id: str = "evt-evidence-001",
+    payload: dict | None = None,
+    relations: tuple[EventRelation, ...] | None = None,
+    source_adapter: str = "source-adapter",
+) -> CanonicalEvent:
+    """Create a minimal canonical event for rendering tests."""
+    return CanonicalEvent(
+        event_id=event_id,
+        event_kind="message.created",
+        schema_version=1,
+        timestamp=datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+        source_adapter=source_adapter,
+        source_transport_id="transport-1",
+        source_channel_id="ch-0",
+        parent_event_id=None,
+        lineage=(),
+        relations=relations or (),
+        payload=payload or {"text": "evidence test message"},
+        metadata=EventMetadata(),
+    )
+
+
+def make_context(
+    target_adapter: str = "target-adapter",
+    target_platform: str | None = None,
+    delivery_strategy: str = "direct",
+    target_channel: str | None = None,
+    max_text_bytes: int | None = None,
+    max_text_chars: int | None = None,
+    source_origin_label: str | None = None,
+    target_destination: RouteDestination | None = None,
+) -> RenderingContext:
+    """Create a RenderingContext with sensible defaults."""
+    return RenderingContext(
+        delivery_strategy=delivery_strategy,  # type: ignore[arg-type]
+        target_adapter=target_adapter,
+        target_channel=target_channel,
+        target_platform=target_platform,
+        max_text_bytes=max_text_bytes,
+        max_text_chars=max_text_chars,
+        source_origin_label=source_origin_label,
+        target_destination=target_destination,
+    )
+
+
+def make_lxmf_renderer() -> LxmfRenderer:
+    from medre.adapters.lxmf.renderer import LxmfRenderer
+
+    return LxmfRenderer(metadata_embedding=True)

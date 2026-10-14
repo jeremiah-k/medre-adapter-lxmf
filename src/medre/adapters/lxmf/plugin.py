@@ -1,13 +1,23 @@
 """Declarative registration for the separately distributed adapter."""
 
-from medre.adapter_registry import AdapterSpec, SymbolRef
+from medre.adapter_registry import AdapterSpec, DestinationSpec, SymbolRef
 
 
 def adapter_spec() -> AdapterSpec:
     return AdapterSpec(
+        destinations=(
+            DestinationSpec(
+                "lxmf_destination",
+                SymbolRef(
+                    "medre.config.adapters.lxmf_destinations", "validate_destination"
+                ),
+            ),
+        ),
         transport="lxmf",
         config=SymbolRef("medre.config.adapters.lxmf", "LxmfConfig"),
-        runtime_config=SymbolRef("medre.config.model", "LxmfRuntimeConfig"),
+        runtime_config=SymbolRef(
+            "medre.config.adapters.lxmf_runtime", "LxmfRuntimeConfig"
+        ),
         adapter=SymbolRef("medre.adapters.lxmf.adapter", "LxmfAdapter"),
         fake_adapter=SymbolRef("medre.adapters.fakes.lxmf", "FakeLxmfAdapter"),
         renderer_factory=SymbolRef(
@@ -28,6 +38,5 @@ def adapter_spec() -> AdapterSpec:
         ),
         support_endpoint_fields=("storage_path", "display_name"),
         support_secret_fields=("identity_path",),
-        traits=frozenset({"radio"}),
         native_detection_priority=40,
     )
