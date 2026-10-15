@@ -42,8 +42,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from medre.adapters._attribution_dispatch import project_source_fields
 from medre.adapters.lxmf.fields import LxmfFieldsHelper
+from medre.adapters.metadata import project_source_fields
 from medre.core.events import CanonicalEvent
 from medre.core.rendering.attribution import (
     RelayAttribution,
