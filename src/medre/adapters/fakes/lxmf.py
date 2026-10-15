@@ -142,7 +142,7 @@ class FakeLxmfClient:
 _FAKE_LXMF_CAPABILITIES = AdapterCapabilities(
     text=True,
     title=True,
-    replies="unsupported",
+    replies="fallback",
     threads="fallback",
     reactions="unsupported",
     edits="unsupported",
@@ -198,6 +198,7 @@ class FakeLxmfAdapter(AdapterContract):
         adapter_id: str | None = None,
     ) -> None:
         super().__init__()
+        self._capabilities = _FAKE_LXMF_CAPABILITIES
         if config is None:
             if adapter_id is None:
                 adapter_id = "fake_lxmf"
@@ -247,7 +248,7 @@ class FakeLxmfAdapter(AdapterContract):
             platform=self.platform,
             role=self.role,
             version="0.1.0",
-            capabilities=_FAKE_LXMF_CAPABILITIES,
+            capabilities=self._capabilities,
             health="healthy" if self._started else "unknown",
         )
 

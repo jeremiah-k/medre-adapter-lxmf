@@ -81,7 +81,7 @@ from medre.core.supervision.diagnostic_contract import PENDING_DELIVERY_COUNT
 _LXMF_CAPABILITIES = AdapterCapabilities(
     text=True,
     title=True,
-    replies="unsupported",
+    replies="fallback",
     threads="fallback",
     reactions="unsupported",
     edits="unsupported",

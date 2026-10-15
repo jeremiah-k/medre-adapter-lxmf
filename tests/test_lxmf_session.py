@@ -1176,14 +1176,14 @@ class TestBoundedOutboundCleanup:
 
 
 class TestLxmfCapabilitiesUnsupportedRelations:
-    """LXMF capabilities explicitly mark replies/reactions as unsupported.
+    """LXMF capabilities expose reply fallback and unsupported reactions.
     Per W1 audit: MEDRE does NOT decode or write LXMF native FIELD_THREAD;
     relations are fallback/envelope-only."""
 
-    def test_lxmf_adapter_replies_unsupported(self) -> None:
+    def test_lxmf_adapter_replies_fallback(self) -> None:
         from medre.adapters.lxmf.adapter import _LXMF_CAPABILITIES
 
-        assert _LXMF_CAPABILITIES.replies == "unsupported"
+        assert _LXMF_CAPABILITIES.replies == "fallback"
 
     def test_lxmf_adapter_reactions_unsupported(self) -> None:
         from medre.adapters.lxmf.adapter import _LXMF_CAPABILITIES

@@ -113,10 +113,10 @@ class TestLxmfAdapterCapabilities:
 
         assert _FAKE_LXMF_CAPABILITIES.direct_messages is True
 
-    def test_capabilities_replies_unsupported(self) -> None:
+    def test_capabilities_replies_fallback(self) -> None:
         from medre.adapters.fakes.lxmf import _FAKE_LXMF_CAPABILITIES
 
-        assert _FAKE_LXMF_CAPABILITIES.replies == "unsupported"
+        assert _FAKE_LXMF_CAPABILITIES.replies == "fallback"
 
     def test_capabilities_reactions_unsupported(self) -> None:
         from medre.adapters.fakes.lxmf import _FAKE_LXMF_CAPABILITIES
