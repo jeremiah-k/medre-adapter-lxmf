@@ -5,7 +5,7 @@ readme = "README.md"
 description = "lxmf transport adapter for MEDRE"
 requires-python = ">=3.11"
 classifiers = ["Typing :: Typed"]
-license = "GPL-3.0-or-later"
+license = "MIT"
 dependencies = ["medre>=0.1.0,<0.2.0", 'lxmf==1.2.1', 'rns==1.5.7']
 
 [project.entry-points."medre.adapters"]
