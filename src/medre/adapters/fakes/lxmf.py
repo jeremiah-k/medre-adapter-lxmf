@@ -95,7 +95,7 @@ class FakeLxmfClient:
         self,
         text: str,
         title: str = "",
-        fields: dict | None = None,
+        fields: dict[str, Any] | None = None,
         destination_hash: str = "",
     ) -> dict[str, Any]:
         """Send a text message and return a deterministic message ID.

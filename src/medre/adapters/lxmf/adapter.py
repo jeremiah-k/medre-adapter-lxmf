@@ -152,7 +152,7 @@ class LxmfAdapter(AdapterContract):
             if reticulum_config_dir is not None
             else config.reticulum_config_dir
         )
-        self._session = LxmfSession(
+        self._session: LxmfSession | None = LxmfSession(
             config=config,
             adapter_id=config.adapter_id,
             platform=self.platform,
@@ -162,8 +162,8 @@ class LxmfAdapter(AdapterContract):
         self._classifier = LxmfPacketClassifier(config)
         self.ctx: AdapterContext | None = None
         self._started: bool = False
-        self._background_tasks: set[asyncio.Task] = set()
-        self._observation_tasks: set[asyncio.Task] = set()
+        self._background_tasks: set[asyncio.Task[Any]] = set()
+        self._observation_tasks: set[asyncio.Task[Any]] = set()
 
         # Cached health string from last health_check() call.
         self._last_health: str | None = None
@@ -309,14 +309,17 @@ class LxmfAdapter(AdapterContract):
                     f"connection_type={self._config.connection_type!r}"
                 )
 
+        session = self._session
+        if session is None:
+            raise LxmfConnectionError("LXMF session is unavailable")
         try:
-            await self._session.start(
+            await session.start(
                 message_callback=self._on_packet,
             )
         except asyncio.CancelledError:
             # Best-effort cleanup of partially-started session.
             try:
-                await asyncio.shield(self._session.stop(timeout=2.0))
+                await asyncio.shield(session.stop(timeout=2.0))
             except Exception:
                 pass
             self._session = None
@@ -327,7 +330,7 @@ class LxmfAdapter(AdapterContract):
         except LxmfConnectionError:
             # Best-effort cleanup of partially-started session.
             try:
-                await self._session.stop(timeout=5.0)
+                await session.stop(timeout=5.0)
             except Exception:
                 pass
             self._started = False
@@ -337,7 +340,7 @@ class LxmfAdapter(AdapterContract):
         except Exception as exc:
             # Best-effort cleanup of partially-started session.
             try:
-                await self._session.stop(timeout=5.0)
+                await session.stop(timeout=5.0)
             except Exception:
                 pass
             self._started = False
@@ -346,7 +349,7 @@ class LxmfAdapter(AdapterContract):
             raise LxmfConnectionError(f"LXMF session failed to start: {exc}") from exc
 
         # Wire delivery state callback for terminal state notifications.
-        self._session.set_delivery_state_callback(self._on_delivery_state)
+        session.set_delivery_state_callback(self._on_delivery_state)
 
         self._mark_started(ctx)
         self._started = True
@@ -408,7 +411,8 @@ class LxmfAdapter(AdapterContract):
 
         # Stop the session (which tears down SDK objects) with whatever
         # budget remains.
-        await self._session.stop(timeout=max(0.0, deadline - loop.time()))
+        if self._session is not None:
+            await self._session.stop(timeout=max(0.0, deadline - loop.time()))
 
         self._inbound_dedup.clear()
         if self.ctx is not None:
@@ -647,8 +651,11 @@ class LxmfAdapter(AdapterContract):
             if result.attempt_provenance is not None
             else None
         )
+        session = self._session
+        if session is None:
+            raise AdapterPermanentError("LXMF session is unavailable")
         try:
-            native_id, delivery_state = await self._session.send_text(
+            native_id, delivery_state = await session.send_text(
                 destination_hash=str(destination_hash),
                 content=str(content),
                 title=str(title),
@@ -945,6 +952,6 @@ class LxmfAdapter(AdapterContract):
     # -- Session access -----------------------------------------------------
 
     @property
-    def session(self) -> LxmfSession:
+    def session(self) -> LxmfSession | None:
         """The owned :class:`~medre.adapters.lxmf.session.LxmfSession`."""
         return self._session

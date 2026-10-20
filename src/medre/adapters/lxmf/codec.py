@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Literal, cast
 
 from medre.adapters.lxmf.errors import LxmfCodecError
 from medre.adapters.lxmf.event_shape import build_lxmf_native_metadata
@@ -60,7 +60,7 @@ class LxmfCodec(AdapterCodec):
             clock if clock is not None else (lambda: datetime.now(timezone.utc))
         )
 
-    def _reconstruct_relations(self, envelope: dict) -> list[EventRelation]:
+    def _reconstruct_relations(self, envelope: dict[str, Any]) -> list[EventRelation]:
         """Reconstruct EventRelation objects from a MEDRE envelope dict.
 
         Gracefully skips invalid or corrupt relation entries.
@@ -111,7 +111,10 @@ class LxmfCodec(AdapterCodec):
                 fallback_text = raw.get("fallback_text")
                 relations.append(
                     EventRelation(
-                        relation_type=relation_type,
+                        relation_type=cast(
+                            Literal["reply", "reaction", "edit", "delete", "thread"],
+                            relation_type,
+                        ),
                         target_event_id=(
                             target_event_id
                             if isinstance(target_event_id, str)
