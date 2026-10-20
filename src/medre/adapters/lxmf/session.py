@@ -495,8 +495,8 @@ class LxmfSession:
         # Lifecycle guards.
         self._started: bool = False
         self._stop_requested: bool = False
-        self._reconnect_task: asyncio.Task | None = None
-        self._announce_task: asyncio.Task | None = None
+        self._reconnect_task: asyncio.Task[None] | None = None
+        self._announce_task: asyncio.Task[None] | None = None
         self._delivery_destination: Any = None  # RNS.Destination
         self._delivery_destination_hash: bytes | None = None
 
@@ -1109,7 +1109,8 @@ class LxmfSession:
             # shutdown runs it again — otherwise the same persistence
             # writes execute twice on process exit.
             try:
-                atexit.unregister(exit_handler)
+                if callable(exit_handler):
+                    atexit.unregister(exit_handler)
             except Exception as exc:
                 self._logger.debug(
                     "LxmfSession %s: could not unregister atexit handler: %s",
@@ -1274,7 +1275,7 @@ class LxmfSession:
                 exc,
             )
 
-    def _log_task_exception(self, task: asyncio.Task) -> None:
+    def _log_task_exception(self, task: asyncio.Task[Any]) -> None:
         """Done callback for fire-and-forget tasks — logs exceptions
         to prevent 'Task exception was never retrieved'."""
         try:
