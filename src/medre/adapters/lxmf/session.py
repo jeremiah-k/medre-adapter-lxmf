@@ -129,6 +129,8 @@ import logging
 import random
 import signal
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -393,6 +395,43 @@ class _OutboundDelivery:
 # ---------------------------------------------------------------------------
 # Session
 # ---------------------------------------------------------------------------
+
+
+@contextmanager
+def _preserve_runtime_signals(
+    logger: logging.Logger, adapter_id: str
+) -> Iterator[None]:
+    """Retain runtime shutdown authority across a main-thread SDK constructor.
+
+    Both Reticulum and LXMF install process handlers. Restore the handlers
+    immediately, including failed construction, without changing SDK atexit
+    registrations or treating the shared Reticulum instance as session-owned.
+    """
+    handlers: dict[int, Any] = {}
+    try:
+        handlers = {
+            signal.SIGINT: signal.getsignal(signal.SIGINT),
+            signal.SIGTERM: signal.getsignal(signal.SIGTERM),
+        }
+    except (AttributeError, OSError, ValueError) as exc:
+        logger.warning(
+            "LxmfSession %s: could not snapshot runtime signal handlers: %s",
+            adapter_id,
+            exc,
+        )
+    try:
+        yield
+    finally:
+        for signum, handler in handlers.items():
+            try:
+                signal.signal(signum, handler)
+            except (AttributeError, OSError, TypeError, ValueError) as exc:
+                logger.warning(
+                    "LxmfSession %s: could not restore runtime signal handler %s: %s",
+                    adapter_id,
+                    signum,
+                    exc,
+                )
 
 
 class LxmfSession:
@@ -956,7 +995,8 @@ class LxmfSession:
                         )
                 self._reticulum = existing
             else:
-                self._reticulum = RNS.Reticulum(self._reticulum_config_dir)
+                with _preserve_runtime_signals(self._logger, self._adapter_id):
+                    self._reticulum = RNS.Reticulum(self._reticulum_config_dir)
 
             # 2. Load or create identity.
             if self._config.identity_path:
@@ -977,43 +1017,13 @@ class LxmfSession:
                     "storage_path is required for LXMRouter construction "
                     "(validated LXMF LXMRouter behavior raises ValueError without it)"
                 )
-            # LXMRouter installs its own process SIGINT/SIGTERM handlers in
-            # its constructor. MEDRE is embedding the router inside a larger
-            # process and may host multiple LXMF adapters, so preserve the
-            # handlers that were already authoritative and restore them
-            # immediately after construction. The router's atexit handler
-            # remains registered for process-exit persistence.
-            previous_signal_handlers: dict[int, Any] = {}
-            try:
-                previous_signal_handlers = {
-                    signal.SIGINT: signal.getsignal(signal.SIGINT),
-                    signal.SIGTERM: signal.getsignal(signal.SIGTERM),
-                }
-            except (AttributeError, OSError, ValueError) as exc:
-                self._logger.debug(
-                    "LxmfSession %s: could not snapshot process signal "
-                    "handlers before LXMRouter construction: %s",
-                    self._adapter_id,
-                    exc,
-                )
-
-            try:
+            # Preserve runtime signal authority independently for each SDK.
+            # Their atexit registrations remain owned by their native lifecycle.
+            with _preserve_runtime_signals(self._logger, self._adapter_id):
                 self._router = lxmf.LXMRouter(
                     identity=self._identity,
                     storagepath=storagepath,
                 )
-            finally:
-                for signum, previous_handler in previous_signal_handlers.items():
-                    try:
-                        signal.signal(signum, previous_handler)
-                    except (AttributeError, OSError, TypeError, ValueError) as exc:
-                        self._logger.debug(
-                            "LxmfSession %s: could not restore process signal "
-                            "handler %s after LXMRouter construction: %s",
-                            self._adapter_id,
-                            signum,
-                            exc,
-                        )
 
             # 4. Register delivery callback.
             try:
