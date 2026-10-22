@@ -406,32 +406,44 @@ def _preserve_runtime_signals(
     Both Reticulum and LXMF install process handlers. Restore the handlers
     immediately, including failed construction, without changing SDK atexit
     registrations or treating the shared Reticulum instance as session-owned.
+    Signals delivered inside the synchronous constructor remain SDK-owned.
     """
-    handlers: dict[int, Any] = {}
+    handlers: dict[signal.Signals, Any] = {}
     try:
-        handlers = {
-            signal.SIGINT: signal.getsignal(signal.SIGINT),
-            signal.SIGTERM: signal.getsignal(signal.SIGTERM),
-        }
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            handlers[signum] = signal.getsignal(signum)
     except (AttributeError, OSError, ValueError) as exc:
-        logger.warning(
-            "LxmfSession %s: could not snapshot runtime signal handlers: %s",
+        # Never call an SDK constructor when host signal ownership cannot be
+        # restored. A partial snapshot is not sufficient for safe embedding.
+        logger.error(
+            "LxmfSession %s: cannot snapshot runtime signal handlers: %s",
             adapter_id,
             exc,
         )
+        raise LxmfConnectionError(
+            "Cannot preserve runtime signal handlers during SDK startup"
+        ) from exc
     try:
         yield
     finally:
+        restore_failures: list[Exception] = []
         for signum, handler in handlers.items():
             try:
                 signal.signal(signum, handler)
             except (AttributeError, OSError, TypeError, ValueError) as exc:
-                logger.warning(
+                logger.error(
                     "LxmfSession %s: could not restore runtime signal handler %s: %s",
                     adapter_id,
                     signum,
                     exc,
                 )
+                restore_failures.append(exc)
+        if restore_failures:
+            # Successful SDK setup is not safe when runtime shutdown
+            # authority remains under the SDK's process-wide handlers.
+            raise LxmfConnectionError(
+                "Could not restore runtime signal handlers after SDK startup"
+            ) from restore_failures[0]
 
 
 class LxmfSession:
