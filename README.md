@@ -178,3 +178,15 @@ SDK-free tier. Native schemas and validated examples live in `docs/schemas` here
 This repository declares its own Ruff/Black policy. CI checks all Python source
 and tests, plus commit whitespace, alongside the fake/native qualification tiers.
 The native adapter package includes its own `py.typed` marker.
+
+## Startup and shutdown ownership
+
+The session preserves MEDRE's SIGINT/SIGTERM handlers around both Reticulum and
+LXMF construction, including failed setup. SDK initialization remains on the main
+thread because the pinned constructors install process signal handlers. SDK
+atexit registrations are not changed during construction; session teardown may
+invoke and unregister the router exit hook. A synchronous constructor cannot
+be interrupted safely by asyncio while it runs; signal delivery during that
+constructor is an SDK limitation. Session stop does not stop a Reticulum
+instance shared with another consumer. See the
+[runtime ownership contract](docs/spec/runtime-ownership.md).
