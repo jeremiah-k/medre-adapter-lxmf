@@ -43,11 +43,20 @@ kernel operation.
 A ready worker receives a cooperative Stop request. Stopped acknowledges session
 cleanup; the parent MUST additionally observe and reap process exit. On a
 shutdown deadline the parent MUST force termination and retain that fact in
-WorkerExit. A pre-readiness worker is force-terminated rather than waiting for
-an SDK constructor to read stdin. Concurrent stop callers share one cleanup task.
+WorkerExit. A received Stopped frame records native cleanup acknowledgement
+independently of whether the leader exits before the deadline. Forced cleanup
+of remaining process-group descendants MUST also be reported even when the
+leader exited normally. A pre-readiness worker is force-terminated rather than
+waiting for an SDK constructor to read stdin. Concurrent stop callers share
+one cleanup task.
 SDK descendants in the owned POSIX process group are retired before pipe EOF is
-awaited. Windows descendant ownership requires separate qualification before
-production rollout; terminating its leader alone is not a process-tree guarantee.
+awaited. A native descendant that leaves that process group is outside the
+worker's ownership; the parent MUST bound its own pipe draining, discard unsent
+stdin bytes after the cooperative exchange, and close its pipe read ends so an
+escaped descendant cannot retain owned pipes or hang stop() indefinitely. This
+does NOT terminate or reap such an escaped descendant. Windows descendant
+ownership requires separate qualification before production rollout;
+terminating its leader alone is not a process-tree guarantee.
 
 ## Qualification and production wiring gate
 

@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 from dataclasses import dataclass
+from typing import Protocol, cast
 
 from medre.adapters.lxmf.errors import LxmfConnectionError
 from medre.adapters.lxmf.worker_protocol import (
@@ -24,9 +25,15 @@ from medre.adapters.lxmf.worker_protocol import (
 from medre.config.adapters.lxmf import LxmfConfig
 
 
+class _ProcessPipes(Protocol):
+    """Describe asyncio's private transport seam absent from Process stubs."""
+
+    _transport: asyncio.SubprocessTransport
+
+
 @dataclass(frozen=True)
 class WorkerExit:
-    """Process exit evidence, distinct from native message delivery evidence."""
+    """Native cleanup ACK, forced group cleanup and leader exit are distinct."""
 
     returncode: int | None
     forced: bool
@@ -176,17 +183,23 @@ class NativeWorker:
             raise cancelled
         return result
 
-    def _kill(self) -> None:
-        """Kill the owned process group without invoking SDK signal handlers."""
+    def _kill(self) -> bool:
+        """Force an owned leader/group, reporting whether a signal was sent."""
         process = self._process
         if process is None:
-            return
-        with contextlib.suppress(ProcessLookupError):
+            return False
+        try:
             if sys.platform == "win32":
                 if process.returncode is None:
                     process.kill()
+                    return True
             else:
+                # Even after the leader exits, descendants can hold SDK pipes.
                 os.killpg(process.pid, signal.SIGKILL)
+                return True
+        except ProcessLookupError:
+            pass
+        return False
 
     async def _stop_owned(self, timeout: float) -> WorkerExit:
         """Own the spawn result, cooperative stop, forced stop and pipe drain."""
@@ -209,19 +222,45 @@ class NativeWorker:
                     process.stdin.close()
                     await process.wait()
         except (TimeoutError, ConnectionError, OSError, RuntimeError):
-            acknowledged = False
+            # A Stopped frame acknowledges native cleanup, not process exit.
+            # Do not erase a received ACK if the process misses its exit
+            # deadline or closes a pipe with an error afterwards.
+            pass
         finally:
             if process.returncode is None:
                 forced = True
-                self._kill()
-            await process.wait()
+            # Retire the whole POSIX group before waiting for pipe EOF. A
+            # descendant may keep the pipes open after the leader exits.
+            forced = self._kill() or forced
             if process.stdin is not None:
-                process.stdin.close()
-                with contextlib.suppress(ConnectionError, OSError):
-                    await process.stdin.wait_closed()
-            # SDK descendants may inherit pipes. Retire the owned group before
-            # waiting for EOF, even if its leader has already exited.
-            self._kill()
-            if self._stderr is not None:
-                await self._stderr
+                # Cooperative exchange is over. Discard unsent configuration:
+                # an escaped reader can retain stdin without ever draining it.
+                # Cancelling wait_closed itself also cancels asyncio's shared
+                # close future, causing late pipe callbacks to fail.
+                if process.stdin.transport.get_write_buffer_size():
+                    process.stdin.transport.abort()
+                else:
+                    process.stdin.close()
+                with contextlib.suppress(ConnectionError, OSError, TimeoutError):
+                    await asyncio.wait_for(
+                        asyncio.shield(process.stdin.wait_closed()), timeout=1.0
+                    )
+            # Process has no public pipe-close method; keep its private
+            # transport dependency confined to this typed lifecycle seam.
+            transport = cast(_ProcessPipes, process)._transport
+            try:
+                if self._stderr is not None:
+                    # Escaped descendants can retain stderr beyond group exit.
+                    await asyncio.wait_for(self._stderr, timeout=1.0)
+            except TimeoutError:
+                pass
+            finally:
+                # Closing every owned read end is required even if stderr
+                # draining fails. Detached native processes are outside the
+                # group's ownership and cannot control parent pipe lifetime.
+                for descriptor in (1, 2):
+                    pipe = transport.get_pipe_transport(descriptor)
+                    if pipe is not None:
+                        pipe.close()
+                await process.wait()
         return WorkerExit(process.returncode, forced, acknowledged)

@@ -8,3 +8,7 @@ Qualify blocked constructors, real host signals, late spawn results, ignored
 shutdown and native SDK initialization without interfaces. Production adapter
 message and delivery-feedback wiring remains on the established session until
 its worker counterpart is qualified.
+
+- Preserve native cleanup acknowledgement independently of forced leader or
+  descendant termination. Bound inherited-pipe draining and discard buffered
+  configuration during teardown, including detached descendants retaining stdin.

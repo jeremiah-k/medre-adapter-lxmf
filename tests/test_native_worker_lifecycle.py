@@ -2,6 +2,8 @@
 
 import asyncio
 import io
+import os
+import re
 import signal
 import struct
 import sys
@@ -46,8 +48,20 @@ if mode == "ignore-stop":
     sys.stderr.write("stop-entered\\n")
     sys.stderr.flush()
     time.sleep(60)
+if mode in {"ack-with-descendant", "escaped-stderr"}:
+    import subprocess
+    detached = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        start_new_session=mode == "escaped-stderr")
+    if mode == "escaped-stderr":
+        sys.stderr.write(f"escaped-pid:{detached.pid}\\n")
+        sys.stderr.flush()
 sys.stdout.buffer.write(encode(Stopped()))
 sys.stdout.buffer.flush()
+if mode == "ack-then-hang":
+    sys.stderr.write("acknowledged-before-exit\\n")
+    sys.stderr.flush()
+    time.sleep(60)
 """
 
 
@@ -137,6 +151,53 @@ async def test_non_cooperative_stop_is_forced_and_reaped():
     assert outcome.forced
     assert not outcome.acknowledged
     assert outcome.returncode is not None
+
+
+async def test_shutdown_acknowledgement_survives_forced_process_reaping():
+    """A clean Stop ACK and a forced process exit are independent facts."""
+    worker = _worker("ack-then-hang", startup_timeout=12)
+    await worker.start()
+    outcome = await worker.stop(timeout=0.2)
+    assert outcome.acknowledged
+    assert outcome.forced
+    assert outcome.returncode is not None
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX worker process groups")
+async def test_forced_descendant_reaping_is_recorded_even_after_clean_leader_exit():
+    """Process-group cleanup must not be reported as wholly cooperative."""
+    worker = _worker("ack-with-descendant", startup_timeout=12)
+    await worker.start()
+    outcome = await worker.stop(timeout=1.0)
+    assert outcome.acknowledged
+    assert outcome.returncode == 0
+    assert outcome.forced
+    assert worker._stderr.done()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX detached process groups")
+async def test_stop_bounds_stderr_drain_when_descendant_escapes_worker_group():
+    """An escaped SDK descendant must not make parent cleanup indefinite."""
+    worker = _worker("escaped-stderr", startup_timeout=12)
+    await worker.start()
+    stopping = asyncio.create_task(worker.stop(timeout=0.1))
+    done, _ = await asyncio.wait({stopping}, timeout=2.0)
+    try:
+        assert stopping in done
+        outcome = await stopping
+        assert outcome.acknowledged
+        assert worker._stderr.done()
+    finally:
+        marker = re.search(rb"escaped-pid:(\d+)", worker._stderr_tail)
+        if marker is not None:
+            try:
+                os.kill(int(marker.group(1)), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        # Let the original implementation complete even if the bounded
+        # deadline assertion fails, so the regression cannot leak a task.
+        if not stopping.done():
+            await asyncio.wait_for(stopping, timeout=5)
 
 
 async def test_no_readiness_on_clean_early_exit():
@@ -325,3 +386,46 @@ async def test_worker_receives_configured_reticulum_directory(override):
         )
     finally:
         await worker.stop()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX detached process groups")
+async def test_cancelled_start_bounds_buffered_stdin_with_escaped_reader():
+    """An escaped reader cannot keep buffered configuration pending during reap."""
+    child = """
+import subprocess, sys, time
+p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
+    stdout=subprocess.DEVNULL, start_new_session=True)
+sys.stderr.write(f"escaped-pid:{p.pid}\\n")
+sys.stderr.flush()
+time.sleep(60)
+"""
+    worker = NativeWorker(
+        LxmfConfig("buffered", origin_label="x" * 512_000),
+        _command=(sys.executable, "-c", child),
+        startup_timeout_seconds=12,
+    )
+    starting = asyncio.create_task(worker.start())
+    try:
+        assert await wait_until(
+            lambda: b"escaped-pid:" in worker._stderr_tail, timeout=5
+        )
+        assert worker._process.stdin.transport.get_write_buffer_size() > 0
+        starting.cancel()
+        done, _ = await asyncio.wait({starting}, timeout=4)
+        assert starting in done
+        with pytest.raises(asyncio.CancelledError):
+            await starting
+        assert worker.returncode is not None
+        assert worker._stderr.done()
+        assert worker._process.stdin.transport.get_write_buffer_size() == 0
+    finally:
+        marker = re.search(rb"escaped-pid:(\d+)", worker._stderr_tail)
+        if marker is not None:
+            try:
+                os.kill(int(marker.group(1)), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        if not starting.done():
+            starting.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(starting, timeout=5)
