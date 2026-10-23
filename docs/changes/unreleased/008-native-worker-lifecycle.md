@@ -12,3 +12,6 @@ its worker counterpart is qualified.
 - Preserve native cleanup acknowledgement independently of forced leader or
   descendant termination. Bound inherited-pipe draining and discard buffered
   configuration during teardown, including detached descendants retaining stdin.
+
+Qualify consecutive native worker lifetimes against an opt-in private RNode
+profile, requiring independently expected identity and acknowledged clean exits.

@@ -74,3 +74,23 @@ handoff, persistent identity/queue ownership and restart isolation. Unknown
 handoff outcomes MUST NOT become invented success, negative confirmation or an
 unqualified automatic resend. Native bidirectional RF and platform process-tree
 termination are separate required profiles for their respective guarantees.
+
+## Repeatable RNode lifecycle profile
+
+Run the hardware tier only while the selected radio and native profile are not
+owned by another runtime. Set `LXMF_WORKER_HARDWARE_PROFILE` to a private JSON
+fixture containing `config` (the LxmfConfig fields, including explicit identity,
+storage and Reticulum paths) and `expected_destination_hash` (an independently
+recorded 32-character hex destination). Map those paths and the serial device
+into the test container. Keep the fixture and native state outside version
+control.
+
+```console
+python -m pytest tests/test_native_worker_hardware.py -m hardware -v
+```
+
+The test opens two consecutive workers against the same profile, checks the
+expected identity, requires acknowledged clean exits and verifies that host
+signal handlers retain ownership. It does not establish message delivery,
+peer reachability or worker data-plane qualification. Run the core's native
+adapter campaign separately for bidirectional RF traffic and rendering evidence.
