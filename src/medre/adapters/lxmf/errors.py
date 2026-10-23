@@ -52,3 +52,16 @@ class LxmfPacketError(LxmfError):
 
 class LxmfSessionError(LxmfError):
     """Raised when the LXMF session lifecycle encounters an error."""
+
+
+class LxmfHandoffUnknownError(LxmfSendError):
+    """Native handoff may have occurred; automatic resubmission is unsafe.
+
+    This is a non-retryable dispatch failure, not evidence that the recipient
+    failed to receive the message. Reconcile the native queue before retrying.
+    """
+
+    def __init__(
+        self, message: str = "LXMF handoff outcome unknown; automatic retry suppressed"
+    ) -> None:
+        super().__init__(message, transient=False)

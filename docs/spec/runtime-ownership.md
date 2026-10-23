@@ -25,3 +25,11 @@ shutdown guarantees are required.
 The [native worker lifecycle](native-worker.md) defines the internal process
 interface and its qualification gate. Production message and feedback wiring
 remains on the established session until that successor is qualified.
+
+## Native submission uncertainty
+
+Failures before the native router call MAY use bounded construction retries.
+Once handle_outbound has been entered, any raised exception MUST be treated as
+an unknown handoff outcome. The adapter MUST NOT automatically resubmit that
+attempt or infer a negative recipient confirmation. Operator reconciliation
+is required before retrying an uncertain dispatch.
