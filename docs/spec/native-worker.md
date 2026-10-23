@@ -111,6 +111,11 @@ Real output-queue overflow or invalid control/reply protocol MUST fail the
 generation and trigger owned process cleanup. Invalid untrusted inbound packet
 fields MUST drop only that packet, not stop the worker. Cancelling a request
 caller MUST NOT detach response consumption or discard its pending fact context.
+A queued duplicate attempt MUST NOT release the first caller's context when it
+is cancelled before writing. A terminal observation MUST release its context
+even when the host feedback callback raises; that exception MUST be logged, not
+translated into a successful delivery. Feedback diagnostics MUST expire stale
+contexts without requiring another outbound submission.
 A timed-out native status probe degrades local health without interrupting an
 active submission. Worker loss fails local health; remote reachability remains
 unknown. Worker restart is an explicit lifecycle operation, never a blind resend.

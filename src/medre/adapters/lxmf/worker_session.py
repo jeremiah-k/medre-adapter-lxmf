@@ -194,13 +194,18 @@ class WorkerSession:
                     self._worker.channel._fail("Contradictory native message identity")
                     return
                 context.native_id = update.native_message_id
-                if self._delivery_callback is not None:
-                    result = self._delivery_callback(
-                        update.native_message_id, update.state, context.context
-                    )
-                    if inspect.isawaitable(result):
-                        await result
-                self._contexts.pop(update.operation_id, None)
+                try:
+                    if self._delivery_callback is not None:
+                        result = self._delivery_callback(
+                            update.native_message_id, update.state, context.context
+                        )
+                        if inspect.isawaitable(result):
+                            await result
+                finally:
+                    # A terminal native fact cannot be replayed by the worker.
+                    # A failing host observer must not pin its attempt forever.
+                    if self._contexts.get(update.operation_id) is context:
+                        self._contexts.pop(update.operation_id, None)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -255,6 +260,7 @@ class WorkerSession:
             ) from None
         self._expire_feedback_contexts()
         record = self._contexts.get(operation_id)
+        owns_context = record is None
         if record is None:
             if len(self._contexts) >= 1000:
                 raise LxmfSendError(
@@ -308,7 +314,11 @@ class WorkerSession:
         except asyncio.CancelledError:
             # A waiter cancelled before acquiring the Submit lock cannot have
             # written a frame and must not consume feedback capacity.
-            if not entered_exchange and record.context is delivery_context:
+            if (
+                not entered_exchange
+                and owns_context
+                and self._contexts.get(operation_id) is record
+            ):
                 self._contexts.pop(operation_id, None)
             raise
         except WorkerProtocolError:
@@ -360,6 +370,7 @@ class WorkerSession:
             0,
             None,
         )
+        self._expire_feedback_contexts()
         failure = (
             self._worker.channel.failure
             if self._worker and self._worker.channel

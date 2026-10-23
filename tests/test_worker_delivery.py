@@ -375,3 +375,95 @@ async def test_stale_feedback_contexts_release_capacity_without_misattribution()
         assert session.connected
     finally:
         await session.stop()
+
+
+async def test_cancelling_duplicate_attempt_before_handoff_preserves_first_feedback():
+    """A queued duplicate does not own or retire the first send's observation."""
+    from medre.adapters.lxmf.worker_protocol import Submit
+
+    session = _session("echo")
+    feedback = AsyncMock()
+    session.set_delivery_state_callback(feedback)
+    await session.start()
+    result = _rendering_result(
+        event_id="duplicate",
+        channel="aa" * 16,
+        plan_id="same-plan",
+        outbox_id="same-outbox",
+    )
+    context = LxmfDeliveryContext(result.attempt_provenance, result.target_channel)
+    assert session._worker and session._worker.channel
+    channel = session._worker.channel
+    original = channel.exchange
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def delay_first(request, *, timeout):
+        if isinstance(request, Submit) and not entered.is_set():
+            entered.set()
+            await release.wait()
+        return await original(request, timeout=timeout)
+
+    channel.exchange = delay_first
+    first = asyncio.create_task(
+        session.send_text("aa" * 16, "hello", delivery_context=context)
+    )
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=3)
+        assert len(session._contexts) == 1
+        duplicate = asyncio.create_task(
+            session.send_text("aa" * 16, "hello", delivery_context=context)
+        )
+        # The second send starts and waits at the submit lock without writing.
+        await asyncio.sleep(0)
+        duplicate.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await duplicate
+        assert len(session._contexts) == 1
+        release.set()
+        assert (await asyncio.wait_for(first, timeout=3))[0]
+        assert await wait_until(lambda: feedback.await_count == 1, timeout=3)
+        assert feedback.await_args.args[2] is context
+        assert not session._contexts
+    finally:
+        release.set()
+        if not first.done():
+            first.cancel()
+            await asyncio.gather(first, return_exceptions=True)
+        await session.stop()
+
+
+async def test_terminal_observer_failure_does_not_pin_feedback_context(caplog):
+    """A failing host callback must not retain a terminal feedback context."""
+    session = _session("echo")
+    observer = AsyncMock(side_effect=RuntimeError("observer rejected notification"))
+    session.set_delivery_state_callback(observer)
+    await session.start()
+    try:
+        assert (await session.send_text("aa" * 16, "hello"))[0]
+        assert await wait_until(lambda: observer.await_count == 1, timeout=3)
+        assert session._worker and session._worker.channel
+        await asyncio.wait_for(session._worker.channel.updates.join(), timeout=3)
+        assert not session._contexts
+        assert "LXMF native delivery observation failed" in caplog.text
+        assert session.connected
+    finally:
+        await session.stop()
+
+
+async def test_feedback_diagnostics_expire_stale_contexts_without_new_send():
+    """Idle deployments should not report expired in-memory feedback as pending."""
+    from medre.adapters.lxmf.worker_session import _FEEDBACK_RETENTION_SECONDS
+
+    session = _session("quiet")
+    await session.start()
+    try:
+        assert (await session.send_text("aa" * 16, "hello"))[0]
+        assert session.diagnostics().pending_delivery_count == 1
+        next(iter(session._contexts.values())).created_at -= (
+            _FEEDBACK_RETENTION_SECONDS + 1
+        )
+        assert session.diagnostics().pending_delivery_count == 0
+        assert not session._contexts
+    finally:
+        await session.stop()
