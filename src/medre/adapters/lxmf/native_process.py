@@ -150,8 +150,13 @@ class NativeWorker:
                     raise LxmfConnectionError("Native worker exited without readiness")
                 self._ready = reply
                 return reply
-        except BaseException:
-            await self.stop(timeout=2.0)
+        except BaseException as startup_error:
+            try:
+                await self.stop(timeout=2.0)
+            except Exception as cleanup_error:
+                if isinstance(startup_error, asyncio.CancelledError):
+                    raise startup_error from cleanup_error
+                raise
             raise
 
     async def stop(self, timeout: float = 5.0) -> WorkerExit:
@@ -173,12 +178,17 @@ class NativeWorker:
                 self._stop_owned(timeout), name="lxmf-worker-stop"
             )
         cancelled: asyncio.CancelledError | None = None
-        while not self._stopping.done():
-            try:
-                await asyncio.shield(self._stopping)
-            except asyncio.CancelledError as exc:
-                cancelled = exc
-        result = self._stopping.result()
+        try:
+            while not self._stopping.done():
+                try:
+                    await asyncio.shield(self._stopping)
+                except asyncio.CancelledError as exc:
+                    cancelled = exc
+            result = self._stopping.result()
+        except BaseException as cleanup_error:
+            if cancelled is not None:
+                raise cancelled from cleanup_error
+            raise
         if cancelled is not None:
             raise cancelled
         return result
@@ -211,12 +221,16 @@ class NativeWorker:
             return WorkerExit(None, False, False)
         acknowledged = False
         forced = False
+        group_cleanup_denied = False
         try:
             if self._ready is not None and process.returncode is None and timeout > 0:
                 assert process.stdin is not None and process.stdout is not None
                 async with asyncio.timeout(timeout) as deadline:
                     self._shutdown_deadline = deadline
-                    process.stdin.write(encode(Stop(timeout)))
+                    # Session cleanup must finish before the parent's deadline:
+                    # allow time for the acknowledgement and process exit.
+                    session_budget = max(0.0, min(timeout * 0.8, timeout - 0.5))
+                    process.stdin.write(encode(Stop(session_budget)))
                     await process.stdin.drain()
                     acknowledged = isinstance(await read_async(process.stdout), Stopped)
                     process.stdin.close()
@@ -231,7 +245,19 @@ class NativeWorker:
                 forced = True
             # Retire the whole POSIX group before waiting for pipe EOF. A
             # descendant may keep the pipes open after the leader exits.
-            forced = self._kill() or forced
+            try:
+                forced = self._kill() or forced
+            except PermissionError:
+                # A denied group signal must not skip closing the pipes or
+                # reaping the leader. Never report unknown group cleanup as
+                # a fully successful shutdown.
+                group_cleanup_denied = True
+                if process.returncode is None:
+                    try:
+                        process.kill()
+                        forced = True
+                    except ProcessLookupError:
+                        pass
             if process.stdin is not None:
                 # Cooperative exchange is over. Discard unsent configuration:
                 # an escaped reader can retain stdin without ever draining it.
@@ -263,4 +289,6 @@ class NativeWorker:
                     if pipe is not None:
                         pipe.close()
                 await process.wait()
+        if group_cleanup_denied:
+            raise LxmfConnectionError("Native worker process-group cleanup was denied")
         return WorkerExit(process.returncode, forced, acknowledged)

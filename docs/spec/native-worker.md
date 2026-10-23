@@ -32,6 +32,8 @@ NOT establish readiness. Ready MUST NOT imply a message handoff or delivery.
 One NativeWorker instance owns one process lifetime. It MUST retain a process
 spawn task until ownership of its result is settled, including cancellation
 before process creation returns. Repeated cancellation MUST NOT detach cleanup.
+Caller cancellation MUST remain the raised outcome if cleanup fails, retaining
+that failure as its exception cause.
 No worker may announce readiness after shutdown has taken ownership.
 
 Native initialization has a parent-owned deadline. A constructor that is blocked
@@ -40,8 +42,10 @@ host's SIGINT or SIGTERM handlers. The operating system's own process creation
 and reaping primitives remain prerequisites; no timeout can preempt a blocked
 kernel operation.
 
-A ready worker receives a cooperative Stop request. Stopped acknowledges session
-cleanup; the parent MUST additionally observe and reap process exit. On a
+A ready worker receives a cooperative Stop request. Its native session-stop
+budget MUST be smaller than the enclosing parent deadline, reserving time for
+pipe delivery, the Stopped response, and process exit. Stopped acknowledges
+session cleanup; the parent MUST additionally observe and reap process exit. On a
 shutdown deadline the parent MUST force termination and retain that fact in
 WorkerExit. A received Stopped frame records native cleanup acknowledgement
 independently of whether the leader exits before the deadline. Forced cleanup
@@ -54,9 +58,17 @@ awaited. A native descendant that leaves that process group is outside the
 worker's ownership; the parent MUST bound its own pipe draining, discard unsent
 stdin bytes after the cooperative exchange, and close its pipe read ends so an
 escaped descendant cannot retain owned pipes or hang stop() indefinitely. This
-does NOT terminate or reap such an escaped descendant. Windows descendant
-ownership requires separate qualification before production rollout;
-terminating its leader alone is not a process-tree guarantee.
+does NOT terminate or reap such an escaped descendant. A POSIX process-group
+signal denied by the operating system MUST NOT bypass remaining pipe and leader
+cleanup or be reported as a successful group reap.
+Because asyncio may reap the worker group leader before the parent signals the
+group, its numeric process-group ID can subsequently be reused. A stable
+group-resident supervisor/sentinel or another verified process-group ownership
+mechanism is required to eliminate this risk; the present draft does NOT make
+that guarantee. Production rollout MUST NOT claim safe arbitrary-descendant
+reaping until this boundary is qualified. Windows descendant ownership requires
+separate qualification before production rollout; terminating its leader alone
+is not a process-tree guarantee.
 
 ## Qualification and production wiring gate
 

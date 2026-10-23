@@ -43,7 +43,11 @@ if mode == "noisy":
     sys.stderr.flush()
 sys.stdout.buffer.write(encode(Ready(os.getpid(), True, True, None, {"reticulum_config_dir": start.reticulum_config_dir})))
 sys.stdout.buffer.flush()
-read_sync(sys.stdin.buffer)
+command = read_sync(sys.stdin.buffer)
+if mode == "stop-budget":
+    sys.stderr.write(f"session-budget:{command.timeout_seconds}\\n")
+    sys.stderr.flush()
+    time.sleep(command.timeout_seconds)
 if mode == "ignore-stop":
     sys.stderr.write("stop-entered\\n")
     sys.stderr.flush()
@@ -198,6 +202,38 @@ async def test_stop_bounds_stderr_drain_when_descendant_escapes_worker_group():
         # deadline assertion fails, so the regression cannot leak a task.
         if not stopping.done():
             await asyncio.wait_for(stopping, timeout=5)
+
+
+@pytest.mark.parametrize("timeout", [1.0, 5.0])
+async def test_worker_session_stop_reserves_parent_ack_and_exit_time(timeout):
+    """The worker's own cleanup may not consume the entire parent deadline."""
+    worker = _worker("stop-budget")
+    await worker.start()
+    result = await worker.stop(timeout=timeout)
+    assert result.acknowledged
+    assert not result.forced
+    match = re.search(rb"session-budget:([0-9.]+)", worker._stderr_tail)
+    assert match is not None
+    budget = float(match.group(1))
+    assert 0 <= budget < timeout
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process group errors")
+async def test_denied_process_group_cleanup_still_reaps_and_closes_pipes(monkeypatch):
+    """Permission errors must not bypass the cleanup section's remaining work."""
+    worker = _worker("ignore-stop")
+    await worker.start()
+
+    def denied(pid, sig):
+        # Leave the leader alive so cleanup must exercise its direct fallback.
+        raise PermissionError("permission denied")
+
+    monkeypatch.setattr(os, "killpg", denied)
+    with pytest.raises(LxmfConnectionError, match="group cleanup was denied"):
+        await worker.stop(timeout=0.05)
+    assert worker.returncode is not None
+    assert worker._stderr.done()
+    assert worker._stopping.done()
 
 
 async def test_no_readiness_on_clean_early_exit():
@@ -429,3 +465,36 @@ time.sleep(60)
             starting.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await asyncio.wait_for(starting, timeout=5)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process group errors")
+@pytest.mark.parametrize("operation", ["start", "stop"])
+async def test_cancelled_lifecycle_retains_cleanup_failure_as_cause(
+    monkeypatch, operation
+):
+    """Caller cancellation survives a denied group signal after owned cleanup."""
+    worker = _worker("blocked" if operation == "start" else "ignore-stop")
+    if operation == "start":
+        pending = asyncio.create_task(worker.start())
+        marker = b"constructor-entered"
+    else:
+        await worker.start()
+        pending = asyncio.create_task(worker.stop(timeout=12))
+        marker = b"stop-entered"
+    assert await wait_until(lambda: marker in worker._stderr_tail, timeout=5)
+
+    def denied(pid, sig):
+        raise PermissionError("permission denied")
+
+    monkeypatch.setattr(os, "killpg", denied)
+    pending.cancel()
+    pending.cancel()
+    if operation == "stop":
+        worker._shutdown_deadline.reschedule(asyncio.get_running_loop().time())
+    with pytest.raises(asyncio.CancelledError) as caught:
+        await pending
+    assert isinstance(caught.value.__cause__, LxmfConnectionError)
+    assert pending.cancelling() == 2
+    assert worker.returncode is not None
+    assert worker._stderr.done()
+    assert worker._stopping.done()

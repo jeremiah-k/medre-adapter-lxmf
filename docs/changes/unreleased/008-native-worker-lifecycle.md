@@ -15,3 +15,8 @@ its worker counterpart is qualified.
 
 Qualify consecutive native worker lifetimes against an opt-in private RNode
 profile, requiring independently expected identity and acknowledged clean exits.
+
+Reserve acknowledgement and exit time outside the native session cleanup budget.
+Retain caller cancellation when cleanup reports a denied process-group signal,
+with the cleanup failure preserved as the exception cause. Finish pipe closure
+and leader reaping before exposing that failure.
