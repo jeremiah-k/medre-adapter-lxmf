@@ -1,12 +1,12 @@
-# Native worker lifecycle
+# Native worker ownership and message delivery
 
 ## Scope and implementation status
 
-The internal NativeWorker interface owns a dedicated process for native SDK
-initialization and teardown. The production adapter continues to use its
-established session implementation. Message submission, inbound forwarding,
-terminal delivery observations and recovery are not wired through this worker.
-This lifecycle module MUST NOT be reported as production transport qualification.
+Real Reticulum adapters use an owned native process for SDK initialization,
+message submission, inbound normalization, terminal facts and teardown. The
+parent uses WorkerSession; SDK-free fake adapters retain the local session.
+Discovery, configuration and parent adapter construction MUST NOT import native
+SDK modules. The native session runs on the worker's main thread.
 
 Moving the native session behind this interface keeps the SDK's signal handlers,
 Reticulum singleton, native threads and exit hooks inside its own process. The
@@ -22,7 +22,8 @@ without exposing their payload in error text. There is no pickle or generic RPC
 method lookup. SDK stdout MUST be separated from protocol output before SDK
 imports; stderr MUST be drained with bounded private retention.
 
-Start carries validated configuration. Ready identifies the child PID and reports
+Start carries validated configuration and explicitly selects lifecycle-only or
+message-plane operation. Ready identifies the child PID and reports
 native initialization and its diagnostics snapshot. A parent MUST verify that
 identity and require connected/router readiness; process exit zero alone MUST
 NOT establish readiness. Ready MUST NOT imply a message handoff or delivery.
@@ -78,22 +79,88 @@ teardown. Control exchanges and the owner's exit wait MUST be bounded; an
 unresponsive owner MUST be terminated and reported as a cleanup failure. Windows descendant ownership requires separate qualification before
 production rollout; terminating its leader alone is not a process-tree guarantee.
 
-## Qualification and production wiring gate
+## Message plane and authority
 
-Deterministic real-process tests cover blocked construction, startup deadline,
-repeated cancellation, late spawn ownership, ignored shutdown, early zero exit,
-verbose stderr and actual host SIGINT/SIGTERM during blocked initialization.
-A native SDK tier initializes both pinned SDKs with no network or radio
-interfaces, verifying native readiness, host handler preservation and clean exit.
-These tests do not establish RF connectivity or native delivery behavior.
+Submit carries plain content, integer-keyed LXMF fields and an opaque operation
+identity. Submitted acknowledges only a returned SDK call and a committed local
+handoff fence. It MUST NOT establish recipient delivery. Native byte values and
+integer map keys MUST survive framing without JSON coercion. SDK objects,
+non-finite numbers and values nested deeper than 32 levels MUST be rejected.
 
-Before the production session uses the worker, qualification MUST cover bounded
-inbound data and delivery-state forwarding, integer/byte native metadata fields,
-exact-attempt correlation retained by the parent, worker loss after a possible
-handoff, persistent identity/queue ownership and restart isolation. Unknown
-handoff outcomes MUST NOT become invented success, negative confirmation or an
-unqualified automatic resend. Native bidirectional RF and platform process-tree
-termination are separate required profiles for their respective guarantees.
+The parent MUST derive operation identity from the immutable core attempt
+provenance and retain that provenance locally. The child MUST NOT receive core
+objects. DeliveryUpdate carries an opaque operation identity, native message ID
+and provider-emitted terminal state. The parent MUST echo its captured attempt
+context into PostHandoffObservation, including when feedback precedes the
+submission reply. Unknown operations MUST NOT be correlated by destination or
+message-text guesses. Contradictory native IDs MUST fail the generation.
+
+One reader owns reply dispatch. Separate bounded inbound and feedback consumers
+MUST keep slow canonical admission from blocking terminal facts or submission
+replies. The channel permits 32 pending requests, 64 inbound packets and 128
+terminal facts; the child permits 128 output frames. The parent retains at most
+1,000 pending attempt contexts, refusing sends before native tracking can evict
+a pending operation. Overflow or invalid protocol
+MUST fail the generation and trigger owned process cleanup. Cancelling a request
+caller MUST NOT detach response consumption or discard its pending fact context.
+A timed-out native status probe degrades local health without interrupting an
+active submission. Worker loss fails local health; remote reachability remains
+unknown. Worker restart is an explicit lifecycle operation, never a blind resend.
+
+Inbound normalization uses the established codec, classification, deduplication
+and canonical admission path. LXMF acknowledges native receipt before invoking
+its callback. Neither that native acknowledgement nor worker forwarding proves
+durable canonical admission. Uncommitted inbound packets and terminal facts can
+be lost across a crash; the adapter MUST NOT claim lossless ingestion or replay
+terminal facts it did not preserve. Core owns durable event and feedback evidence.
+
+## Persistent identity and submission fences
+
+A message worker MUST exclusively lease its native queue storage and identity
+for its lifetime. These are cooperative MEDRE ownership checks, not protection
+against arbitrary third-party SDK consumers. A missing explicit identity uses a
+private, atomically published identity under storage_path; restarts MUST retain
+that identity. A missing or invalid explicit identity MUST fail startup rather
+than silently generating a replacement.
+
+The private .medre-handoffs.sqlite journal stores operation IDs, payload digests,
+native IDs and dispatch outcomes, without plaintext message bodies. The worker
+MUST durably reserve dispatching before entering native submission and commit
+accepted before replying. An interrupted reservation is unknown. The same
+operation with a different payload MUST be refused. A committed accepted
+operation MUST return its saved handoff without another SDK call. Journal fences
+MUST NOT be evicted automatically; deleting a profile discards its duplicate
+protection and requires operator reconciliation of its native queue.
+
+Possible acceptance followed by an exception, worker loss or reply timeout MUST
+produce an explicit unknown outcome. Core receives a non-retryable dispatch
+error requiring reconciliation, not a native negative delivery observation.
+The worker MUST NOT claim exactly-once delivery or replay uncertain operations.
+An accepted journal row does not preserve native SDK callback objects across
+restart; absent terminal evidence remains unknown. SDK queues remain SDK-owned,
+with no independent adapter retransmission loop.
+
+Worker environments use an explicit OS/interpreter/locale/certificate-path
+allowlist. Other adapters' credential variables MUST NOT be inherited. The SDK
+and process-group owner receive the same filtered environment. This restricts
+accidental secret inheritance; trusted native code retains ordinary filesystem
+and operating-system access and is not sandboxed.
+
+## Qualification
+
+Real-process tests exercise bounded message forwarding, integer/byte fields,
+early terminal facts, exact-attempt parent correlation, caller cancellation,
+uncertain worker loss, durable handoff reuse and independent callback dispatch.
+Lifecycle tests cover blocked construction, repeated cancellation, late spawn
+ownership, noisy stderr, forced shutdown and actual host signals. Native SDK
+tests require persistent default identity, exclusive ownership and clean restart
+without radio interfaces. The core campaign independently checks native peers,
+rendered attribution, durable outbox evidence and feedback observations.
+
+Native bidirectional RF and platform process-tree termination are separate
+qualification profiles. Linux POSIX worker ownership is supported; Windows
+leader termination does not establish descendant cleanup. No hardware guarantee
+may be inferred from SDK-only or local loopback tests.
 
 ## Repeatable RNode lifecycle profile
 

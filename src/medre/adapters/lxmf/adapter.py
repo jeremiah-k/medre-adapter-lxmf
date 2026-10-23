@@ -41,7 +41,6 @@ from __future__ import annotations
 
 import asyncio
 from collections import OrderedDict
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -56,6 +55,10 @@ from medre.adapters.lxmf.errors import (
 from medre.adapters.lxmf.event_shape import LXMF_NATIVE_SCHEMA_VERSION
 from medre.adapters.lxmf.packet_classifier import LxmfPacketClassifier
 from medre.adapters.lxmf.session import LxmfSession
+from medre.adapters.lxmf.worker_session import WorkerSession
+from medre.adapters.lxmf.session_context import (
+    LxmfDeliveryContext as _LxmfDeliveryObservationContext,
+)
 from medre.config.adapters.lxmf import LxmfConfig
 from medre.core.contracts.adapter import (
     AdapterCapabilities,
@@ -72,7 +75,6 @@ from medre.core.contracts.delivery import (
 )
 from medre.core.events.delivery import (
     DELIVERY_OBSERVATION_STATE_VALUES,
-    DeliveryAttemptProvenance,
 )
 from medre.core.rendering.renderer import RenderingResult
 from medre.core.supervision.diagnostic_contract import PENDING_DELIVERY_COUNT
@@ -99,14 +101,6 @@ _LXMF_CAPABILITIES = AdapterCapabilities(
 
 # Maximum entries in the inbound dedup OrderedDict (LRU eviction).
 _DEDUP_MAX_SIZE = 1024
-
-
-@dataclass(frozen=True)
-class _LxmfDeliveryObservationContext:
-    """Opaque exact-attempt facts carried through the LXMF session."""
-
-    attempt_provenance: DeliveryAttemptProvenance
-    native_channel_id: str | None
 
 
 class LxmfAdapter(AdapterContract):
@@ -152,12 +146,7 @@ class LxmfAdapter(AdapterContract):
             if reticulum_config_dir is not None
             else config.reticulum_config_dir
         )
-        self._session: LxmfSession | None = LxmfSession(
-            config=config,
-            adapter_id=config.adapter_id,
-            platform=self.platform,
-            reticulum_config_dir=self._reticulum_config_dir,
-        )
+        self._session: LxmfSession | WorkerSession | None = self._new_session()
         self._codec = LxmfCodec(config.adapter_id, config)
         self._classifier = LxmfPacketClassifier(config)
         self.ctx: AdapterContext | None = None
@@ -187,6 +176,18 @@ class LxmfAdapter(AdapterContract):
         self._inbound_dedup: OrderedDict[tuple[str, str], None] = OrderedDict()
 
     # -- Lifecycle ----------------------------------------------------------
+
+    def _new_session(self) -> LxmfSession | WorkerSession:
+        """Keep fake sessions local and every real SDK constructor in its worker."""
+        if self._config.connection_type == "fake":
+            return LxmfSession(
+                self._config,
+                self.adapter_id,
+                reticulum_config_dir=self._reticulum_config_dir,
+            )
+        return WorkerSession(
+            self._config, reticulum_config_dir=self._reticulum_config_dir
+        )
 
     def _reset_inbound_evidence(self) -> None:
         """Reset per-session inbound counters and dedup state."""
@@ -309,9 +310,9 @@ class LxmfAdapter(AdapterContract):
                     f"connection_type={self._config.connection_type!r}"
                 )
 
+        if self._session is None:
+            self._session = self._new_session()
         session = self._session
-        if session is None:
-            raise LxmfConnectionError("LXMF session is unavailable")
         try:
             await session.start(
                 message_callback=self._on_packet,
@@ -388,6 +389,15 @@ class LxmfAdapter(AdapterContract):
                 self._session = None
             return
 
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + max(0.0, timeout)
+        worker_stop_error: BaseException | None = None
+        if isinstance(self._session, WorkerSession):
+            try:
+                await self._session.stop(timeout=timeout * 0.75)
+            except BaseException as exc:
+                worker_stop_error = exc
+
         # Gate callbacks immediately — prevents race between drain completing
         # and session.stop() unsubscribing.  First let delivery-state updates
         # that SDK threads already bridged onto this loop run and spawn their
@@ -400,23 +410,24 @@ class LxmfAdapter(AdapterContract):
         # Clear cached health at lifecycle boundary.
         self._last_health = None
 
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + timeout
-
         # Post-handoff evidence that was already reported before the stop gate
         # gets a bounded chance to commit.  Ordinary background work keeps the
         # existing cancel-first shutdown behavior.
-        await self._drain_observation_tasks(timeout * 0.25)
+        await self._drain_observation_tasks(
+            max(0.0, min(timeout * 0.25, (deadline - loop.time()) * 0.5))
+        )
         await self._drain_background_tasks(max(0.0, (deadline - loop.time()) * 0.5))
 
         # Stop the session (which tears down SDK objects) with whatever
         # budget remains.
-        if self._session is not None:
+        if self._session is not None and not isinstance(self._session, WorkerSession):
             await self._session.stop(timeout=max(0.0, deadline - loop.time()))
 
         self._inbound_dedup.clear()
         if self.ctx is not None:
             self.ctx.logger.info("LxmfAdapter %s stopped", self.adapter_id)
+        if worker_stop_error is not None:
+            raise worker_stop_error
 
     async def health_check(self) -> AdapterInfo:
         """Return a snapshot of the adapter's current local health.
@@ -448,6 +459,8 @@ class LxmfAdapter(AdapterContract):
             Metadata describing the adapter's state with a health
             string of ``"healthy"``, ``"unknown"``, or ``"failed"``.
         """
+        if self._started and isinstance(self._session, WorkerSession):
+            await self._session.refresh()
         if not self._started:
             health = "unknown"
         elif (
@@ -455,7 +468,12 @@ class LxmfAdapter(AdapterContract):
             and self._session.router_running
             and self._session.connected
         ):
-            health = "healthy"
+            health = (
+                "degraded"
+                if isinstance(self._session, WorkerSession)
+                and self._session.status_delayed
+                else "healthy"
+            )
         else:
             health = "failed"
         self._last_health = health
@@ -693,7 +711,7 @@ class LxmfAdapter(AdapterContract):
 
     # -- Inbound callback ---------------------------------------------------
 
-    def _on_packet(self, packet: dict[str, Any]) -> None:
+    def _on_packet(self, packet: dict[str, Any]) -> asyncio.Task[None] | None:
         """Process an inbound LXMF message payload.
 
         Receives normalised message dicts from the session (never raw
@@ -706,14 +724,14 @@ class LxmfAdapter(AdapterContract):
             Normalised LXMF message payload dict.
         """
         if not self._started:
-            return
+            return None
         if self.ctx is None:
-            return
+            return None
 
         try:
             classification = self._classifier.classify(packet)
             if not self._classification_allows_relay(classification):
-                return
+                return None
 
             # Dedup: suppress exact duplicate messages by message_id + content.
             # OrderedDict bounded to _DEDUP_MAX_SIZE (LRU eviction):
@@ -725,7 +743,7 @@ class LxmfAdapter(AdapterContract):
                 if dedup_key in self._inbound_dedup:
                     self._inbound_dedup.move_to_end(dedup_key)
                     self._record_duplicate_suppressed()
-                    return
+                    return None
 
             self._classifier_messages_relayed += 1
 
@@ -749,12 +767,15 @@ class LxmfAdapter(AdapterContract):
             task = asyncio.create_task(self._on_packet_async(canonical, dedup_key))
             task.add_done_callback(self._background_tasks.discard)
             self._background_tasks.add(task)
+            return task
         except Exception:
             if self.ctx is not None:
                 self.ctx.logger.exception(
                     "LxmfAdapter %s: error processing inbound packet",
                     self.adapter_id,
                 )
+
+        return None
 
     async def _on_packet_async(
         self,
@@ -800,7 +821,7 @@ class LxmfAdapter(AdapterContract):
         message_hash: str,
         state: str,
         delivery_context: object | None,
-    ) -> None:
+    ) -> asyncio.Task[None] | None:
         """Report an LXMF provider delivery state as append-only evidence.
 
         The session passes through an opaque correlation object captured at
@@ -809,7 +830,7 @@ class LxmfAdapter(AdapterContract):
         authority: this provider observation never rewrites a receipt or outbox row.
         """
         if not self._started:
-            return
+            return None
         if self.ctx is not None:
             self.ctx.logger.info(
                 "LxmfAdapter %s: delivery %s → %s",
@@ -822,9 +843,9 @@ class LxmfAdapter(AdapterContract):
         if callback is None or not isinstance(
             delivery_context, _LxmfDeliveryObservationContext
         ):
-            return
+            return None
         if state not in DELIVERY_OBSERVATION_STATE_VALUES:
-            return
+            return None
 
         error = None
         if state != "delivered":
@@ -847,6 +868,7 @@ class LxmfAdapter(AdapterContract):
         task = asyncio.create_task(self._report_delivery_feedback(callback, record))
         task.add_done_callback(self._observation_tasks.discard)
         self._observation_tasks.add(task)
+        return task
 
     async def _report_delivery_feedback(
         self,
@@ -952,6 +974,6 @@ class LxmfAdapter(AdapterContract):
     # -- Session access -----------------------------------------------------
 
     @property
-    def session(self) -> LxmfSession | None:
-        """The owned :class:`~medre.adapters.lxmf.session.LxmfSession`."""
+    def session(self) -> LxmfSession | WorkerSession | None:
+        """The normalized local fake session or SDK-free native worker proxy."""
         return self._session

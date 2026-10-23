@@ -12,19 +12,16 @@ hook; construction does not change registrations. A failed handler snapshot
 MUST abort SDK construction with an actionable error. Signal restoration
 failures MUST abort the start and be logged.
 
-The pinned constructors require the main thread. Moving them to an executor
-without explicit SDK embedding support is unsafe. Concurrent core startup does
-not preempt their synchronous initialization; threading changes require separate
-qualification against the SDK lifecycle and signal contracts.
+The pinned constructors require the main thread. Production adapters execute the
+session inside an adapter-owned worker process, so its synchronous constructors
+and signal handlers cannot block the core event loop or replace MEDRE's host
+handlers. The local session preserves its enclosing process's handlers around
+construction and remains available for SDK-free fakes and independent peers.
 
-Signal delivery while a synchronous native constructor is executing cannot be
-preempted by the asyncio scheduler. The host MUST NOT assume instant cancellation
-of the constructor; it SHOULD use a process supervision boundary when hard
-shutdown guarantees are required.
-
-The [native worker lifecycle](native-worker.md) defines the internal process
-interface and its qualification gate. Production message and feedback wiring
-remains on the established session until that successor is qualified.
+The [native worker contract](native-worker.md) defines message forwarding,
+exact-attempt feedback, persistent profile ownership and bounded process cleanup.
+An SDK descendant that escapes the owned POSIX process group requires external
+operating-system supervision; a process group is not a sandbox.
 
 ## Native submission uncertainty
 

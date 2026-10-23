@@ -25,21 +25,21 @@ rns_module: ModuleType | None
 lxmf_module: ModuleType | None
 """The ``lxmf`` module, or ``None`` when not installed."""
 
-try:
-    import RNS
 
-    rns_module = RNS
-except ImportError:
-    rns_module = None
+def _available(name: str) -> bool:
+    """Inspect installation metadata without importing an SDK into the host."""
+    import importlib.util
+    import sys
 
-try:
-    import LXMF
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return sys.modules.get(name) is not None
 
-    lxmf_module = LXMF
-except ImportError:
-    lxmf_module = None
 
-HAS_LXMF = (rns_module is not None) and (lxmf_module is not None)
+rns_module = None
+lxmf_module = None
+HAS_LXMF = _available("RNS") and _available("LXMF")
 
 
 def _require_lxmf() -> tuple[Any, Any]:
@@ -47,9 +47,16 @@ def _require_lxmf() -> tuple[Any, Any]:
 
     Convenience for session internals that need both modules.
     """
-    if not HAS_LXMF or rns_module is None or lxmf_module is None:
+    import importlib
+
+    global rns_module, lxmf_module
+    if not HAS_LXMF:
         raise ImportError(
             "lxmf and/or RNS packages are not installed; "
             "pip install 'medre-adapter-lxmf' or use connection_type='fake'"
         )
+    if rns_module is None:
+        rns_module = importlib.import_module("RNS")
+    if lxmf_module is None:
+        lxmf_module = importlib.import_module("LXMF")
     return rns_module, lxmf_module

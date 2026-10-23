@@ -12,6 +12,8 @@ from typing import Protocol, cast
 
 from medre.adapters.lxmf.errors import LxmfConnectionError
 from medre.adapters.lxmf.process_group import OwnedProcessGroup
+from medre.adapters.lxmf.worker_environment import native_environment
+from medre.adapters.lxmf.worker_channel import WorkerChannel
 from medre.adapters.lxmf.worker_protocol import (
     Failed,
     Ready,
@@ -53,6 +55,7 @@ class NativeWorker:
         reticulum_config_dir: str | None = None,
         startup_timeout_seconds: float = 30.0,
         _command: tuple[str, ...] | None = None,
+        message_plane: bool = False,
     ) -> None:
         config.validate()
         if (
@@ -64,6 +67,9 @@ class NativeWorker:
                 "Native worker startup timeout must be finite and positive"
             )
         self._config = config
+        self._message_plane = message_plane
+        self.channel: WorkerChannel | None = None
+        self._failure_cleanup: asyncio.Task[None] | None = None
         self._reticulum_config_dir = (
             reticulum_config_dir
             if reticulum_config_dir is not None
@@ -112,6 +118,7 @@ class NativeWorker:
             stderr=asyncio.subprocess.PIPE,
             process_group=process_group,
             creationflags=creationflags,
+            env=native_environment(),
         )
         self._process = process
         self._stderr = asyncio.create_task(
@@ -139,7 +146,13 @@ class NativeWorker:
                 if process.stdin is None or process.stdout is None:
                     raise LxmfConnectionError("Native worker pipes are unavailable")
                 process.stdin.write(
-                    encode(Start(self._config, self._reticulum_config_dir))
+                    encode(
+                        Start(
+                            self._config,
+                            self._reticulum_config_dir,
+                            self._message_plane,
+                        )
+                    )
                 )
                 await process.stdin.drain()
                 reply = await read_async(process.stdout)
@@ -154,6 +167,8 @@ class NativeWorker:
                 ):
                     raise LxmfConnectionError("Native worker exited without readiness")
                 self._ready = reply
+                if self._message_plane:
+                    self.channel = WorkerChannel(process, self._schedule_failed_cleanup)
                 return reply
         except BaseException as startup_error:
             try:
@@ -163,6 +178,18 @@ class NativeWorker:
                     raise startup_error from cleanup_error
                 raise
             raise
+
+    def _schedule_failed_cleanup(self) -> None:
+        """Retain failure cleanup rather than leaving a dead generation unreaped."""
+        if self._stopping is None and self._failure_cleanup is None:
+            self._failure_cleanup = asyncio.create_task(
+                self._cleanup_failed_channel(), name="lxmf-failed-generation"
+            )
+
+    async def _cleanup_failed_channel(self) -> None:
+        """Contain cleanup errors; callers retain the channel's explicit failure."""
+        with contextlib.suppress(Exception):
+            await self.stop(timeout=0)
 
     async def stop(self, timeout: float = 5.0) -> WorkerExit:
         """Stop once and defer repeated caller cancellation until cleanup settles.
@@ -237,9 +264,14 @@ class NativeWorker:
                     # Session cleanup must finish before the parent's deadline:
                     # allow time for the acknowledgement and process exit.
                     session_budget = max(0.0, min(timeout * 0.8, timeout - 0.5))
-                    process.stdin.write(encode(Stop(session_budget)))
-                    await process.stdin.drain()
-                    acknowledged = isinstance(await read_async(process.stdout), Stopped)
+                    if self.channel is not None:
+                        acknowledged = await self.channel.request_stop(session_budget)
+                    else:
+                        process.stdin.write(encode(Stop(session_budget)))
+                        await process.stdin.drain()
+                        acknowledged = isinstance(
+                            await read_async(process.stdout), Stopped
+                        )
                     process.stdin.close()
                     await process.wait()
         except (TimeoutError, ConnectionError, OSError, RuntimeError):
@@ -303,8 +335,12 @@ class NativeWorker:
                 try:
                     await process.wait()
                 finally:
-                    if self._group is not None:
-                        await self._group.close()
+                    try:
+                        if self._group is not None:
+                            await self._group.close()
+                    finally:
+                        if self.channel is not None:
+                            await self.channel.close()
         if ownership_error is not None:
             raise LxmfConnectionError(
                 "Native worker group ownership release failed"

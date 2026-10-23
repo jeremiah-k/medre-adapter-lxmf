@@ -134,7 +134,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Coroutine
+from typing import Any, Awaitable, Callable, Coroutine
 
 from medre.adapters.lxmf.compat import HAS_LXMF, _require_lxmf
 from medre.adapters.lxmf.errors import (
@@ -176,7 +176,7 @@ MessageCallback = Callable[[dict[str, Any]], Any]
 # transition.  Receives the message hash (hex string), terminal state value
 # string, and the opaque caller-owned delivery context captured at send
 # initiation.
-DeliveryStateCallback = Callable[[str, str, object | None], None]
+DeliveryStateCallback = Callable[[str, str, object | None], Awaitable[None] | None]
 
 
 # ---------------------------------------------------------------------------
@@ -1425,7 +1425,11 @@ class LxmfSession:
                     cb = self._delivery_state_callback
                     if cb is not None:
                         try:
-                            cb(msg_hash, new_state.value, delivery.delivery_context)
+                            callback_result = cb(
+                                msg_hash, new_state.value, delivery.delivery_context
+                            )
+                            if asyncio.iscoroutine(callback_result):
+                                self._schedule_async_callback(callback_result)
                         except Exception:
                             self._logger.debug(
                                 "LxmfSession %s: error in delivery state "
