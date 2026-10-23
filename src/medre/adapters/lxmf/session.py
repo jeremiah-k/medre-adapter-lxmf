@@ -134,12 +134,13 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Coroutine
+from typing import Any, Awaitable, Callable, Coroutine
 
 from medre.adapters.lxmf.compat import HAS_LXMF, _require_lxmf
 from medre.adapters.lxmf.errors import (
     LxmfConnectionError,
     LxmfSendError,
+    LxmfHandoffUnknownError,
 )
 from medre.config.adapters.lxmf import LxmfConfig
 
@@ -175,7 +176,7 @@ MessageCallback = Callable[[dict[str, Any]], Any]
 # transition.  Receives the message hash (hex string), terminal state value
 # string, and the opaque caller-owned delivery context captured at send
 # initiation.
-DeliveryStateCallback = Callable[[str, str, object | None], None]
+DeliveryStateCallback = Callable[[str, str, object | None], Awaitable[None] | None]
 
 
 # ---------------------------------------------------------------------------
@@ -1424,7 +1425,11 @@ class LxmfSession:
                     cb = self._delivery_state_callback
                     if cb is not None:
                         try:
-                            cb(msg_hash, new_state.value, delivery.delivery_context)
+                            callback_result = cb(
+                                msg_hash, new_state.value, delivery.delivery_context
+                            )
+                            if asyncio.iscoroutine(callback_result):
+                                self._schedule_async_callback(callback_result)
                         except Exception:
                             self._logger.debug(
                                 "LxmfSession %s: error in delivery state "
@@ -1730,28 +1735,33 @@ class LxmfSession:
                     # Extract message hash BEFORE sending (if available).
                     native_id = self._extract_message_hash(lxm)
 
-                    # Send via the router.
-                    self._router.handle_outbound(lxm)
+                    # Crossing the native boundary makes exceptions ambiguous:
+                    # a router may raise after accepting the message.
+                    try:
+                        # Send via the router.
+                        self._router.handle_outbound(lxm)
 
-                    # Try to get message hash after sending.
-                    if native_id is None:
-                        native_id = self._extract_message_hash(lxm)
+                        # Try to get message hash after sending.
+                        if native_id is None:
+                            native_id = self._extract_message_hash(lxm)
 
-                    initial_state = _map_delivery_state(getattr(lxm, "state", None))
+                        initial_state = _map_delivery_state(getattr(lxm, "state", None))
 
-                    # Track the delivery.
-                    if native_id is not None:
-                        self._track_delivery(
-                            native_id,
-                            _OutboundDelivery(
-                                native_message_id=native_id,
-                                state=initial_state,
-                                destination_hash=destination_hash,
-                                delivery_context=delivery_context,
-                            ),
-                        )
+                        # Track the delivery.
+                        if native_id is not None:
+                            self._track_delivery(
+                                native_id,
+                                _OutboundDelivery(
+                                    native_message_id=native_id,
+                                    state=initial_state,
+                                    destination_hash=destination_hash,
+                                    delivery_context=delivery_context,
+                                ),
+                            )
 
-                    return native_id, initial_state
+                        return native_id, initial_state
+                    except Exception as exc:
+                        raise LxmfHandoffUnknownError() from exc
 
                 except asyncio.CancelledError:
                     raise
@@ -1762,6 +1772,9 @@ class LxmfSession:
                         f"Permanent send failure: {exc}",
                         transient=False,
                     ) from exc
+                except LxmfHandoffUnknownError as exc:
+                    self._diag.last_error = f"Uncertain native handoff: {exc}"
+                    raise
                 except LxmfSendError as exc:
                     if not exc.transient:
                         self._diag.permanent_delivery_failures += 1

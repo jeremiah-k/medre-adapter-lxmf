@@ -11,6 +11,7 @@ import subprocess
 import sys
 
 from medre.adapters.lxmf.errors import LxmfConnectionError
+from medre.adapters.lxmf.worker_environment import native_environment
 
 
 class OwnedProcessGroup:
@@ -50,6 +51,7 @@ class OwnedProcessGroup:
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             process_group=0,
+            env=native_environment(),
         )
         await self._acknowledge(None, b"R")
 

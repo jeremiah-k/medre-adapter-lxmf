@@ -1,7 +1,7 @@
 """Tests for LXMF _send_real retry-loop exhaustion behaviour.
 
 When the bounded retry loop exhausts all attempts due to transient
-failures (e.g. router transport errors), the resulting LxmfSendError
+failures before native dispatch (e.g. destination construction errors), the resulting LxmfSendError
 MUST carry ``transient=True`` so the outer pipeline's durable-retry
 mechanism can take over.  Exhausting the adapter-level fast-retry loop
 does NOT make the failure permanent.
@@ -61,7 +61,7 @@ class TestRetryExhaustionTransient:
             hash = b"\x00" * 16
 
             def __init__(self, identity: Any, *args: Any, **kwargs: Any) -> None:
-                pass
+                raise RuntimeError("destination construction glitch")
 
         class FakeLXMessage:
             OUTBOUND = 1
@@ -82,8 +82,7 @@ class TestRetryExhaustionTransient:
         mock_lxmf.LXMessage = FakeLXMessage
 
         mock_router = MagicMock()
-        # handle_outbound raises on every attempt, exhausting the retry loop.
-        mock_router.handle_outbound.side_effect = RuntimeError("transport glitch")
+        # No router call is permitted while destination construction fails.
 
         session._identity = MagicMock()
         session._router = mock_router
@@ -109,4 +108,5 @@ class TestRetryExhaustionTransient:
         # is not a separate transient failure event.
         assert session._diag.transient_delivery_failures == 3
         assert session._diag.permanent_delivery_failures == 0
+        mock_router.handle_outbound.assert_not_called()
         await session.stop()

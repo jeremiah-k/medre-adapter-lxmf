@@ -272,6 +272,55 @@ def _write_reticulum_config(
     (config_dir / "config").write_text(config, encoding="utf-8")
 
 
+def _configure_relation_worker(adapter: Any, home: Path) -> None:
+    """Run SDK-local isolation and announce witnesses in the SDK-owning process."""
+    from medre.adapters.lxmf.worker_session import WorkerSession
+
+    if not isinstance(adapter.session, WorkerSession):
+        raise RuntimeError("relation qualification requires the production worker")
+    adapter.session._command = (
+        sys.executable,
+        "-m",
+        "medre_lxmf_tests.helpers.lxmf_local_probe",
+        "relation-worker",
+        str(home),
+    )
+
+
+def _relation_worker(home: Path) -> int:
+    """Keep SDK inspection in the child without replacing native send or receive."""
+    from medre.adapters.lxmf.native_worker import main as worker_main
+    from medre.adapters.lxmf.session import LxmfSession
+
+    connect = LxmfSession._connect_real
+    send = LxmfSession._send_real
+
+    async def checked_connect(self: Any) -> None:
+        await connect(self)
+        _assert_loopback_config_active(home)
+
+    async def announced_send(
+        self: Any, destination_hash: str, content: str, **kwargs: Any
+    ) -> Any:
+        # The former in-process probe waited for this same SDK-local witness
+        # before sending. Only its location changes; delivery remains real.
+        import RNS
+
+        await _await_condition(
+            lambda: RNS.Identity.recall(bytes.fromhex(destination_hash)) is not None,
+            timeout=_RECALL_TIMEOUT,
+            description="native sender to hear receiver announce",
+        )
+        return await send(self, destination_hash, content, **kwargs)
+
+    with (
+        patch.object(LxmfSession, "_connect_real", checked_connect),
+        patch.object(LxmfSession, "_send_real", announced_send),
+    ):
+        worker_main()
+    return 0
+
+
 def _assert_loopback_config_active(expected_home: Path) -> None:
     """Fail fast if a system Reticulum config overrode HOME isolation."""
     import RNS
@@ -426,8 +475,8 @@ async def _run_relation_receiver(base: Path) -> int:
         config,
         reticulum_config_dir=str(home / ".reticulum"),
     )
+    _configure_relation_worker(adapter, home)
     await adapter.start(_relation_context("lxmf-relation-b", collect))
-    _assert_loopback_config_active(home)
 
     destination_hash = adapter.session._delivery_destination_hash
     if destination_hash is None:
@@ -530,8 +579,8 @@ async def _run_relation(base: Path) -> RelationResult:
             _relation_config(base, "a", "medre-relation-a", announce_interval=0),
             reticulum_config_dir=str(home_a / ".reticulum"),
         )
+        _configure_relation_worker(adapter, home_a)
         await adapter.start(_relation_context("lxmf-relation-a", _collect_noop()))
-        _assert_loopback_config_active(home_a)
 
         a_dest = adapter.session._delivery_destination_hash
         if a_dest is None:
@@ -541,15 +590,6 @@ async def _run_relation(base: Path) -> RelationResult:
             base / "b-ready.json", _B_READY_TIMEOUT, child, log_path
         )
         b_hash = str(ready["destination_hash"])
-
-        import RNS
-
-        b_hash_bytes = bytes.fromhex(b_hash)
-        await _await_condition(
-            lambda: RNS.Identity.recall(b_hash_bytes) is not None,
-            timeout=_RECALL_TIMEOUT,
-            description="instance A to hear instance B's announce",
-        )
 
         event_id = f"evt-relation-{uuid.uuid4().hex[:12]}"
         event = CanonicalEvent(
@@ -651,6 +691,8 @@ def main() -> int:
     scenario = sys.argv[1]
     base = Path(sys.argv[2]).resolve()
     base.mkdir(parents=True, exist_ok=True)
+    if scenario == "relation-worker":
+        return _relation_worker(base)
     if scenario == "suite":
         result = asyncio.run(_run_suite(base))
     elif scenario == "soak":

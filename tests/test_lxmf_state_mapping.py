@@ -17,7 +17,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from medre.adapters.lxmf.errors import LxmfSendError
+from medre.adapters.lxmf.errors import LxmfHandoffUnknownError, LxmfSendError
 from medre.adapters.lxmf.session import (
     LxmfDeliveryState,
     LxmfSession,
@@ -191,156 +191,64 @@ class TestRetryLoopEntry:
 # ===================================================================
 
 
-class TestNonTransientLxmfSendError:
-    """Lines 1291–1295: non-transient LxmfSendError re-raises immediately."""
-
-    async def test_non_transient_reraises_without_retry(self) -> None:
-        session, mock_rns, mock_lxmf, mock_router = await _start_real_mocked_session(
-            router_side_effect=LxmfSendError("permanent", transient=False),
-        )
-
+@pytest.mark.parametrize(
+    "error",
+    [
+        LxmfSendError("permanent", transient=False),
+        LxmfSendError("temporary", transient=True),
+        RuntimeError("transport error"),
+        ValueError("raised after acceptance"),
+    ],
+)
+async def test_router_exception_never_invites_a_second_native_submission(error):
+    """Any exception crossing handle_outbound may follow an accepted message."""
+    session, mock_rns, mock_lxmf, mock_router = await _start_real_mocked_session(
+        router_side_effect=error,
+    )
+    try:
         with patch(
             "medre.adapters.lxmf.session._require_lxmf",
             return_value=(mock_rns, mock_lxmf),
         ):
-            with pytest.raises(LxmfSendError, match="permanent") as exc_info:
-                await session._send_real(
-                    destination_hash="ab" * 16,
-                    content="hello",
-                )
-
-        assert exc_info.value.transient is False
-        # No retries — called exactly once.
-        assert mock_router.handle_outbound.call_count == 1
-        assert session._diag.permanent_delivery_failures == 1
+            with pytest.raises(LxmfHandoffUnknownError) as failure:
+                await session._send_real(destination_hash="ab" * 16, content="hello")
+        assert failure.value.__cause__ is error
+        assert not failure.value.transient
+        mock_router.handle_outbound.assert_called_once()
         assert session._diag.transient_delivery_failures == 0
+    finally:
         await session.stop()
 
 
-# ===================================================================
-# _send_real retry — transient LxmfSendError (lines 1296–1309, 1326–1333)
-# ===================================================================
+async def test_pre_handoff_construction_error_can_retry_without_duplicate_send():
+    """Only errors before the router call can enter the adapter fast retry loop."""
+    session, mock_rns, mock_lxmf, mock_router = await _start_real_mocked_session()
+    destination = mock_rns.Destination
+    calls = 0
 
+    def construct(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("not dispatched")
+        return destination(*args, **kwargs)
 
-class TestTransientLxmfSendErrorRetry:
-    """Lines 1296–1309: transient LxmfSendError records failure and retries.
-    Lines 1326–1333: exhaustion after all retries."""
-
-    async def test_transient_exhausts_all_retries(self) -> None:
-        """All 3 attempts fail with transient LxmfSendError → exhaustion."""
-        session, mock_rns, mock_lxmf, mock_router = await _start_real_mocked_session(
-            router_side_effect=LxmfSendError("temp glitch", transient=True),
-        )
-
-        with patch(
-            "medre.adapters.lxmf.session._require_lxmf",
-            return_value=(mock_rns, mock_lxmf),
-        ):
-            with pytest.raises(
-                LxmfSendError, match=r"Send failed after 3 attempts"
-            ) as exc_info:
-                await session._send_real(
-                    destination_hash="ab" * 16,
-                    content="hello",
-                )
-
-        assert exc_info.value.transient is True
-        # 3 transient in loop (exhaustion is a summary, not a separate increment)
-        assert session._diag.transient_delivery_failures == 3
-        assert session._diag.permanent_delivery_failures == 0
-        assert mock_router.handle_outbound.call_count == 3
-        await session.stop()
-
-    async def test_transient_failure_then_success(self) -> None:
-        """First attempt raises transient LxmfSendError, second succeeds."""
-        session, mock_rns, mock_lxmf, mock_router = await _start_real_mocked_session()
-        call_count = 0
-
-        def _handle(msg: Any) -> None:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                raise LxmfSendError("first try", transient=True)
-
-        mock_router.handle_outbound.side_effect = _handle
-
+    mock_rns.Destination = MagicMock(side_effect=construct)
+    mock_rns.Destination.OUT = destination.OUT
+    mock_rns.Destination.SINGLE = destination.SINGLE
+    try:
         with patch(
             "medre.adapters.lxmf.session._require_lxmf",
             return_value=(mock_rns, mock_lxmf),
         ):
             native_id, state = await session._send_real(
-                destination_hash="ab" * 16,
-                content="hello",
+                destination_hash="ab" * 16, content="hello"
             )
-
         assert native_id is not None
-        assert mock_router.handle_outbound.call_count == 2
-        assert session._diag.transient_delivery_failures == 1
-        assert session._diag.permanent_delivery_failures == 0
-        await session.stop()
-
-
-# ===================================================================
-# _send_real retry — generic Exception (lines 1310–1324, 1326–1333)
-# ===================================================================
-
-
-class TestGenericExceptionRetry:
-    """Lines 1310–1324: generic Exception records failure and retries.
-    Lines 1326–1333: exhaustion after all retries."""
-
-    async def test_generic_exception_exhausts_retries(self) -> None:
-        """All 3 attempts fail with RuntimeError → exhaustion raises
-        LxmfSendError(transient=True)."""
-        session, mock_rns, mock_lxmf, mock_router = await _start_real_mocked_session(
-            router_side_effect=RuntimeError("transport error"),
-        )
-
-        with patch(
-            "medre.adapters.lxmf.session._require_lxmf",
-            return_value=(mock_rns, mock_lxmf),
-        ):
-            with pytest.raises(
-                LxmfSendError, match=r"Send failed after 3 attempts"
-            ) as exc_info:
-                await session._send_real(
-                    destination_hash="ab" * 16,
-                    content="hello",
-                )
-
-        assert exc_info.value.transient is True
-        # 3 generic failures in loop (exhaustion is a summary, not a separate increment)
-        assert session._diag.transient_delivery_failures == 3
-        assert session._diag.permanent_delivery_failures == 0
-        assert mock_router.handle_outbound.call_count == 3
-        await session.stop()
-
-    async def test_generic_failure_then_success(self) -> None:
-        """First attempt raises RuntimeError, second succeeds."""
-        session, mock_rns, mock_lxmf, mock_router = await _start_real_mocked_session()
-        call_count = 0
-
-        def _handle(msg: Any) -> None:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                raise RuntimeError("first try failed")
-
-        mock_router.handle_outbound.side_effect = _handle
-
-        with patch(
-            "medre.adapters.lxmf.session._require_lxmf",
-            return_value=(mock_rns, mock_lxmf),
-        ):
-            native_id, state = await session._send_real(
-                destination_hash="ab" * 16,
-                content="hello",
-            )
-
-        assert native_id is not None
-        assert mock_router.handle_outbound.call_count == 2
-        assert session._diag.transient_delivery_failures == 1
-        assert session._diag.permanent_delivery_failures == 0
+        assert state == LxmfDeliveryState.OUTBOUND
+        assert calls == 2
+        mock_router.handle_outbound.assert_called_once()
+    finally:
         await session.stop()
 
 

@@ -181,12 +181,19 @@ The native adapter package includes its own `py.typed` marker.
 
 ## Startup and shutdown ownership
 
-The session preserves MEDRE's SIGINT/SIGTERM handlers around both Reticulum and
-LXMF construction, including failed setup. SDK initialization remains on the main
-thread because the pinned constructors install process signal handlers. SDK
-atexit registrations are not changed during construction; session teardown may
-invoke and unregister the router exit hook. A synchronous constructor cannot
-be interrupted safely by asyncio while it runs; signal delivery during that
-constructor is an SDK limitation. Session stop does not stop a Reticulum
-instance shared with another consumer. See the
-[runtime ownership contract](docs/spec/runtime-ownership.md).
+Real Reticulum adapters run native SDK construction, queues and callbacks in an
+owned worker process. A blocked constructor cannot block core startup or replace
+MEDRE's host signal handlers. The parent retains canonical admission and exact
+core delivery-attempt provenance; native terminal facts become ordinary
+post-handoff observations. SDK-free fakes keep the local session.
+
+Each worker exclusively leases its identity and queue storage. Omitting
+identity_path generates a persistent identity under storage_path. Preserve that
+private directory across restarts. The local handoff journal fences repeated
+submission of the same core attempt; an uncertain native outcome requires
+operator reconciliation and suppresses automatic retry. Handoff acceptance does
+not establish recipient delivery. Worker loss does not invent terminal facts.
+
+See the [native worker contract](docs/spec/native-worker.md) for cancellation,
+queue bounds, environment inheritance, restart limits and qualification, and the
+[runtime ownership contract](docs/spec/runtime-ownership.md) for SDK embedding.
