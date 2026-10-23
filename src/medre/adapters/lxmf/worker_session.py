@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import time
 import uuid
 from collections import OrderedDict
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import msgspec
@@ -36,6 +37,8 @@ from medre.adapters.lxmf.worker_protocol import (
 from medre.adapters.lxmf.worker_state import payload_digest
 from medre.config.adapters.lxmf import LxmfConfig
 
+_FEEDBACK_RETENTION_SECONDS = 900.0
+
 
 @dataclass
 class _ObservationContext:
@@ -44,6 +47,7 @@ class _ObservationContext:
     context: object | None
     digest: bytes
     native_id: str | None = None
+    created_at: float = field(default_factory=time.monotonic)
 
 
 class WorkerSession:
@@ -65,6 +69,7 @@ class WorkerSession:
         self._message_callback: MessageCallback | None = None
         self._delivery_callback: DeliveryStateCallback | None = None
         self._contexts: dict[str, _ObservationContext] = {}
+        self._submit_lock = asyncio.Lock()
         self._names: OrderedDict[str, str] = OrderedDict()
         self._consumers: list[asyncio.Task[None]] = []
         self._stopping: asyncio.Task[None] | None = None
@@ -205,6 +210,18 @@ class WorkerSession:
             if self._worker.channel.failure and queue.empty():
                 return
 
+    def _expire_feedback_contexts(self) -> None:
+        """Bound retained exact-attempt objects when no terminal fact arrives.
+
+        A later terminal update is still accepted while its context exists.
+        After expiry it is intentionally unmatched, never attributed to a
+        different attempt. Core owns the durable delivery decision.
+        """
+        cutoff = time.monotonic() - _FEEDBACK_RETENTION_SECONDS
+        for operation_id, record in tuple(self._contexts.items()):
+            if record.created_at <= cutoff:
+                del self._contexts[operation_id]
+
     async def send_text(
         self,
         destination_hash: str,
@@ -236,6 +253,7 @@ class WorkerSession:
             raise LxmfSendError(
                 "Native payload violates the plain-data wire contract", transient=False
             ) from None
+        self._expire_feedback_contexts()
         record = self._contexts.get(operation_id)
         if record is None:
             if len(self._contexts) >= 1000:
@@ -249,19 +267,24 @@ class WorkerSession:
                 "Attempt payload conflicts with its native handoff fence",
                 transient=False,
             )
+        entered_exchange = False
         try:
-            response = await worker.channel.exchange(
-                Submit(
-                    uuid.uuid4().hex,
-                    operation_id,
-                    destination_hash,
-                    content,
-                    title,
-                    delivery_method,
-                    fields,
-                ),
-                timeout=max(30.0, self._config.message_delay_seconds + 30.0),
-            )
+            # The child processes Submits serially. Keep queueing outside
+            # the exchange deadline so ordinary fan-out cannot kill the worker.
+            async with self._submit_lock:
+                entered_exchange = True
+                response = await worker.channel.exchange(
+                    Submit(
+                        uuid.uuid4().hex,
+                        operation_id,
+                        destination_hash,
+                        content,
+                        title,
+                        delivery_method,
+                        fields,
+                    ),
+                    timeout=max(30.0, self._config.message_delay_seconds + 30.0),
+                )
             if isinstance(response, SubmitFailed):
                 if response.category == "unknown":
                     raise LxmfHandoffUnknownError(response.error)
@@ -282,6 +305,12 @@ class WorkerSession:
                 raise LxmfHandoffUnknownError()
             record.native_id = response.native_message_id
             return response.native_message_id, response.state
+        except asyncio.CancelledError:
+            # A waiter cancelled before acquiring the Submit lock cannot have
+            # written a frame and must not consume feedback capacity.
+            if not entered_exchange and record.context is delivery_context:
+                self._contexts.pop(operation_id, None)
+            raise
         except WorkerProtocolError:
             self._contexts.pop(operation_id, None)
             raise LxmfSendError(

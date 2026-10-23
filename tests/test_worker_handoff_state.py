@@ -135,3 +135,25 @@ assert 'RNS' not in sys.modules and 'LXMF' not in sys.modules
         timeout=15,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_retryable_handoff_can_reenter_dispatch_without_reusing_uncertain_fence(
+    tmp_path,
+):
+    """A documented pre-handoff transient failure is safe to resubmit."""
+    profile = WorkerProfile(LxmfConfig("retryable", storage_path=str(tmp_path)))
+    digest = payload_digest(("destination", "text"))
+    try:
+        assert profile.begin("same-attempt", digest) is None
+        profile.finish(
+            "same-attempt", SubmissionRecord("retryable", None, "unmapped", "offline")
+        )
+        assert profile.begin("same-attempt", digest) is None
+        # An interrupted second dispatch is *not* safe to send again.
+        assert profile.begin("same-attempt", digest).status == "unknown"
+        profile.finish(
+            "same-attempt", SubmissionRecord("accepted", "native", "outbound", None)
+        )
+        assert profile.begin("same-attempt", digest).native_id == "native"
+    finally:
+        profile.close()

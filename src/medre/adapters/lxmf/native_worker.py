@@ -25,6 +25,8 @@ from medre.adapters.lxmf.worker_protocol import (
     Submit,
     SubmitFailed,
     Submitted,
+    WorkerProtocolError,
+    _decode,
     encode,
     read_sync,
 )
@@ -73,11 +75,24 @@ async def _run(stream: BinaryIO) -> None:
         # Encoding here snapshots mutable SDK-normalized values before yielding.
         # The writer serializes a detached decoded frame, never an SDK object.
         try:
-            from medre.adapters.lxmf.worker_protocol import _decode
-
             frame = encode(message)
-            output.put_nowait(_decode(frame[4:]))
+            snapshot_message = _decode(frame[4:])
+        except WorkerProtocolError:
+            if isinstance(message, Inbound):
+                # SDK-normalized fields can contain untrusted remote values.
+                # Losing that packet must not take down unrelated attempts.
+                logging.getLogger(__name__).warning(
+                    "Dropped inbound LXMF packet outside the native wire contract"
+                )
+                return
+            overflow.set()
+            return
         except Exception:
+            overflow.set()
+            return
+        try:
+            output.put_nowait(snapshot_message)
+        except asyncio.QueueFull:
             overflow.set()
 
     def inbound(packet: dict[str, Any]) -> None:

@@ -29,6 +29,8 @@ async def send(self, destination_hash, content, **kwargs):
         sys.stderr.write('native-entered\\n'); sys.stderr.flush()
         await asyncio.sleep(.1)
     native_id, state = await original(self, destination_hash, content, **kwargs)
+    if mode == 'invalid-inbound':
+        self._message_callback({'fields': {1: float('nan')}, 'content': 'bad'})
     if mode != 'quiet':
         self._delivery_state_callback(native_id, 'delivered', kwargs['delivery_context'])
         self._message_callback({
@@ -305,4 +307,71 @@ async def test_inbound_capacity_failure_reaps_generation_without_handoff_success
         assert session._worker.channel.inbound.qsize() <= 64
     finally:
         blocked.set()
+        await session.stop()
+
+
+async def test_malformed_remote_inbound_does_not_kill_worker_generation():
+    """An LXMF peer cannot turn one malformed field into a worker outage."""
+    inbound = AsyncMock()
+    session = _session("invalid-inbound")
+    await session.start(inbound)
+    try:
+        await session.send_text("aa" * 16, "hello")
+        assert await wait_until(lambda: inbound.await_count == 1, timeout=3)
+        assert inbound.await_args.args[0]["content"] == "hello"
+        assert session.connected
+    finally:
+        await session.stop()
+
+
+async def test_parent_serializes_submissions_before_exchange_deadline():
+    """A queued Submit cannot time out before the worker starts handling it."""
+    from medre.adapters.lxmf.worker_protocol import Submit
+
+    session = _session("quiet")
+    await session.start()
+    assert session._worker is not None and session._worker.channel is not None
+    channel = session._worker.channel
+    original = channel.exchange
+    active, maximum = 0, 0
+
+    async def measure(request, *, timeout):
+        nonlocal active, maximum
+        if isinstance(request, Submit):
+            active += 1
+            maximum = max(maximum, active)
+            try:
+                await asyncio.sleep(0.02)
+                return await original(request, timeout=timeout)
+            finally:
+                active -= 1
+        return await original(request, timeout=timeout)
+
+    channel.exchange = measure
+    try:
+        answers = await asyncio.gather(
+            *(session.send_text("aa" * 16, f"message-{i}") for i in range(5))
+        )
+        assert all(native_id for native_id, _ in answers)
+        assert maximum == 1
+    finally:
+        await session.stop()
+
+
+async def test_stale_feedback_contexts_release_capacity_without_misattribution():
+    """Late terminal observations cannot hold a bounded parent forever."""
+    from medre.adapters.lxmf.worker_session import _FEEDBACK_RETENTION_SECONDS
+
+    session = _session("quiet")
+    await session.start()
+    try:
+        await session.send_text("aa" * 16, "hello")
+        assert len(session._contexts) == 1
+        record = next(iter(session._contexts.values()))
+        record.created_at -= _FEEDBACK_RETENTION_SECONDS + 1
+        session._expire_feedback_contexts()
+        assert not session._contexts
+        await session.send_text("aa" * 16, "new")
+        assert session.connected
+    finally:
         await session.stop()

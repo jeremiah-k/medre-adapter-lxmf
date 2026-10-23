@@ -1772,6 +1772,9 @@ class LxmfSession:
                         f"Permanent send failure: {exc}",
                         transient=False,
                     ) from exc
+                except LxmfHandoffUnknownError as exc:
+                    self._diag.last_error = f"Uncertain native handoff: {exc}"
+                    raise
                 except LxmfSendError as exc:
                     if not exc.transient:
                         self._diag.permanent_delivery_failures += 1

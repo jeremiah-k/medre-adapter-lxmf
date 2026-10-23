@@ -151,6 +151,16 @@ class WorkerProfile:
                     "Attempt payload conflicts with its native handoff fence",
                     transient=False,
                 )
+            if row[1] == "retryable":
+                # This state is committed only after a known pre-handoff
+                # failure. The same exact attempt may safely try again.
+                with self._db:
+                    self._db.execute(
+                        "UPDATE handoffs SET status='dispatching',native_id=NULL,"
+                        "state='unmapped',error=NULL WHERE operation_id=?",
+                        (operation_id,),
+                    )
+                return None
             status = "unknown" if row[1] == "dispatching" else row[1]
             return SubmissionRecord(status, row[2], row[3], row[4])
         with self._db:

@@ -99,9 +99,17 @@ One reader owns reply dispatch. Separate bounded inbound and feedback consumers
 MUST keep slow canonical admission from blocking terminal facts or submission
 replies. The channel permits 32 pending requests, 64 inbound packets and 128
 terminal facts; the child permits 128 output frames. The parent retains at most
-1,000 pending attempt contexts, refusing sends before native tracking can evict
-a pending operation. Overflow or invalid protocol
-MUST fail the generation and trigger owned process cleanup. Cancelling a request
+1,000 pending attempt contexts. Contexts that receive no terminal fact (including
+uncertain handoffs and propagated messages that remain SENT) MUST expire after
+15 minutes, releasing in-memory capacity. Expiry MUST NOT change the durable
+handoff journal or imply non-delivery: any later unmatched terminal fact cannot
+be attributed to a different attempt. At sustained rates exceeding this bound,
+the adapter may still apply temporary capacity backpressure. Parent Submit calls
+MUST serialize before writing to the child, so per-exchange reply deadlines do
+not include queued native pacing. The child MAY remain serial for SDK safety.
+Real output-queue overflow or invalid control/reply protocol MUST fail the
+generation and trigger owned process cleanup. Invalid untrusted inbound packet
+fields MUST drop only that packet, not stop the worker. Cancelling a request
 caller MUST NOT detach response consumption or discard its pending fact context.
 A timed-out native status probe degrades local health without interrupting an
 active submission. Worker loss fails local health; remote reachability remains
@@ -126,7 +134,10 @@ than silently generating a replacement.
 The private .medre-handoffs.sqlite journal stores operation IDs, payload digests,
 native IDs and dispatch outcomes, without plaintext message bodies. The worker
 MUST durably reserve dispatching before entering native submission and commit
-accepted before replying. An interrupted reservation is unknown. The same
+accepted before replying. An interrupted reservation is unknown. A durably committed `retryable` record
+means the previous attempt failed before native handoff; it MAY return to
+`dispatching` on the same operation ID and identical payload. Neither `unknown`
+nor `dispatching` may be retried automatically. The same
 operation with a different payload MUST be refused. A committed accepted
 operation MUST return its saved handoff without another SDK call. Journal fences
 MUST NOT be evicted automatically; deleting a profile discards its duplicate
