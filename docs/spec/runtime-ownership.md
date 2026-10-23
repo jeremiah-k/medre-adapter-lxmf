@@ -21,3 +21,7 @@ Signal delivery while a synchronous native constructor is executing cannot be
 preempted by the asyncio scheduler. The host MUST NOT assume instant cancellation
 of the constructor; it SHOULD use a process supervision boundary when hard
 shutdown guarantees are required.
+
+The [native worker lifecycle](native-worker.md) defines the internal process
+interface and its qualification gate. Production message and feedback wiring
+remains on the established session until that successor is qualified.
