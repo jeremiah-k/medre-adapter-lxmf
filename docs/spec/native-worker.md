@@ -61,14 +61,22 @@ escaped descendant cannot retain owned pipes or hang stop() indefinitely. This
 does NOT terminate or reap such an escaped descendant. A POSIX process-group
 signal denied by the operating system MUST NOT bypass remaining pipe and leader
 cleanup or be reported as a successful group reap.
-Because asyncio may reap the worker group leader before the parent signals the
-group, its numeric process-group ID can subsequently be reused. A stable
-group-resident supervisor/sentinel or another verified process-group ownership
-mechanism is required to eliminate this risk; the present draft does NOT make
-that guarantee. Production rollout MUST NOT claim safe arbitrary-descendant
-reaping until this boundary is qualified. Windows descendant ownership requires
-separate qualification before production rollout; terminating its leader alone
-is not a process-tree guarantee.
+POSIX group identity is reserved by a separate control child created outside
+asyncio's automatic child reaper. The SDK worker joins that private group.
+Before the final group signal, the control child acknowledges moving into the
+host's group while its PID remains reserved. This leaves only native members
+in the SDK group, so an empty group is distinguishable from forced descendant
+cleanup. The parent MUST retain the control child without polling or reaping it
+until all group signalling is complete, including unexpected control-child
+exit. It MUST reject a missing acknowledgement and preserve that failure.
+
+The host MUST NOT install a competing child reaper that consumes these owned
+children. Supported qualification uses Python's default asyncio child handling.
+The control pipe is a lifetime lease: its EOF retires the private group, including
+when the host exits. Closing that lease and reaping the control child complete
+teardown. Control exchanges and the owner's exit wait MUST be bounded; an
+unresponsive owner MUST be terminated and reported as a cleanup failure. Windows descendant ownership requires separate qualification before
+production rollout; terminating its leader alone is not a process-tree guarantee.
 
 ## Qualification and production wiring gate
 

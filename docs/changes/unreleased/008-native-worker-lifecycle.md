@@ -20,3 +20,9 @@ Reserve acknowledgement and exit time outside the native session cleanup budget.
 Retain caller cancellation when cleanup reports a denied process-group signal,
 with the cleanup failure preserved as the exception cause. Finish pipe closure
 and leader reaping before exposing that failure.
+
+Reserve POSIX process-group identity with a control child retained outside
+asyncio's automatic reaper. Move that child out before final signalling so
+clean SDK exits remain distinct from forced descendant cleanup, then close its
+lifetime pipe and reap it. Preserve the reservation through unexpected owner
+exit and retire it after failed SDK spawn.

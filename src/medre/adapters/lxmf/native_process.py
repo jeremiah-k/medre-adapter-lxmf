@@ -5,14 +5,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import math
-import os
-import signal
 import subprocess
 import sys
 from dataclasses import dataclass
 from typing import Protocol, cast
 
 from medre.adapters.lxmf.errors import LxmfConnectionError
+from medre.adapters.lxmf.process_group import OwnedProcessGroup
 from medre.adapters.lxmf.worker_protocol import (
     Failed,
     Ready,
@@ -77,6 +76,7 @@ class NativeWorker:
             "medre.adapters.lxmf.native_worker",
         )
         self._process: asyncio.subprocess.Process | None = None
+        self._group: OwnedProcessGroup | None = None
         self._spawn: asyncio.Task[asyncio.subprocess.Process] | None = None
         self._stderr: asyncio.Task[None] | None = None
         self._stopping: asyncio.Task[WorkerExit] | None = None
@@ -98,14 +98,19 @@ class NativeWorker:
     async def _spawn_owned(self) -> asyncio.subprocess.Process:
         """Publish ownership before the cancellable start caller receives a child."""
         creationflags = 0
+        process_group: int | None = None
         if sys.platform == "win32":
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            self._group = OwnedProcessGroup()
+            await self._group.start()
+            process_group = self._group.pid
         process = await asyncio.create_subprocess_exec(
             *self._command,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            start_new_session=sys.platform != "win32",
+            process_group=process_group,
             creationflags=creationflags,
         )
         self._process = process
@@ -204,9 +209,8 @@ class NativeWorker:
                     process.kill()
                     return True
             else:
-                # Even after the leader exits, descendants can hold SDK pipes.
-                os.killpg(process.pid, signal.SIGKILL)
-                return True
+                assert self._group is not None
+                return self._group.kill()
         except ProcessLookupError:
             pass
         return False
@@ -218,7 +222,10 @@ class NativeWorker:
                 await asyncio.shield(self._spawn)
         process = self._process
         if process is None:
+            if self._group is not None:
+                await self._group.close()
             return WorkerExit(None, False, False)
+        ownership_error: Exception | None = None
         acknowledged = False
         forced = False
         group_cleanup_denied = False
@@ -241,6 +248,11 @@ class NativeWorker:
             # deadline or closes a pipe with an error afterwards.
             pass
         finally:
+            if self._group is not None:
+                try:
+                    await self._group.detach()
+                except Exception as exc:
+                    ownership_error = exc
             if process.returncode is None:
                 forced = True
             # Retire the whole POSIX group before waiting for pipe EOF. A
@@ -288,7 +300,15 @@ class NativeWorker:
                     pipe = transport.get_pipe_transport(descriptor)
                     if pipe is not None:
                         pipe.close()
-                await process.wait()
+                try:
+                    await process.wait()
+                finally:
+                    if self._group is not None:
+                        await self._group.close()
+        if ownership_error is not None:
+            raise LxmfConnectionError(
+                "Native worker group ownership release failed"
+            ) from ownership_error
         if group_cleanup_denied:
             raise LxmfConnectionError("Native worker process-group cleanup was denied")
         return WorkerExit(process.returncode, forced, acknowledged)
