@@ -24,6 +24,7 @@ from medre.core.rendering.renderer import RenderingContext
 
 
 def source_event(payload=None, relations=()):
+    """Build a named native source with an exact reference and private metadata sentinel."""
     return CanonicalEvent(
         event_id="canonical-source",
         event_kind="message.created",
@@ -55,6 +56,7 @@ def source_event(payload=None, relations=()):
 
 
 def renderer(**kwargs):
+    """Resolve the source platform and origin without requiring a visible relay prefix."""
     return LxmfRenderer(
         source_attribution={
             "radio-east": SimpleNamespace(
@@ -68,6 +70,7 @@ def renderer(**kwargs):
 
 def receive(payload):
     # Exercise the same integer-keyed MessagePack fields used by the native worker.
+    """Round-trip integer-keyed worker fields into the real receiving codec."""
     fields = msgspec.msgpack.decode(msgspec.msgpack.encode(payload["fields"]))
     return LxmfCodec("receiver", LxmfConfig(adapter_id="receiver")).decode(
         {
@@ -87,6 +90,7 @@ def receive(payload):
 async def test_context_survives_worker_fields_and_codec_without_replacing_sender(
     origin, expected
 ):
+    """Preserve source claims and origin precedence while keeping receiver-native identity."""
     result = await renderer().render(
         source_event(),
         RenderingContext(
@@ -120,6 +124,7 @@ async def test_context_survives_worker_fields_and_codec_without_replacing_sender
 
 
 async def test_remote_context_relations_cannot_create_canonical_relations():
+    """Retain remote relation hints as claims without granting them binding authority."""
     result = await renderer().render(
         source_event(),
         RenderingContext(
@@ -143,6 +148,7 @@ async def test_remote_context_relations_cannot_create_canonical_relations():
 
 @pytest.mark.parametrize("strategy", ["direct", "fallback_text"])
 async def test_relation_hints_follow_delivery_strategy(strategy):
+    """Carry relation hints for direct delivery and omit them from text-only fallbacks."""
     relation = EventRelation(
         relation_type="reply",
         target_event_id="target",
@@ -163,6 +169,7 @@ async def test_relation_hints_follow_delivery_strategy(strategy):
 
 
 async def test_disabled_embedding_omits_context():
+    """Respect the metadata switch even when source attribution is available."""
     result = await renderer(metadata_embedding=False).render(
         source_event(),
         RenderingContext(
@@ -177,6 +184,7 @@ async def test_disabled_embedding_omits_context():
     "invalid", [True, {"schema_version": 2}, {"schema_version": 1, "source": []}]
 )
 async def test_invalid_remote_context_does_not_discard_message(invalid):
+    """Keep valid message text when its optional remote relay context is malformed."""
     result = await renderer().render(
         source_event(),
         RenderingContext(
@@ -200,6 +208,7 @@ async def test_invalid_remote_context_does_not_discard_message(invalid):
 async def test_styled_body_is_authoritative_while_legacy_alias_is_preserved(
     payload, expected
 ):
+    """Prefer styled canonical body text while retaining legacy unstyled alias behavior."""
     result = await renderer().render(
         source_event(payload),
         RenderingContext(
