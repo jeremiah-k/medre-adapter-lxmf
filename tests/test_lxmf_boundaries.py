@@ -964,7 +964,9 @@ async def test_lxmf_rejects_non_string_rendered_content_before_native_send(
     adapter._started = True
     adapter._session = SimpleNamespace(send_text=send)
     result = RenderingResult(
-        event_id="invalid-wire", target_adapter="lxmf-1", target_channel=None,
+        event_id="invalid-wire",
+        target_adapter="lxmf-1",
+        target_channel=None,
         payload={"content": content, "title": title, "destination_hash": "a" * 32},
     )
     with pytest.raises(AdapterPermanentError, match="must be text"):
