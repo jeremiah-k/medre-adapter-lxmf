@@ -50,8 +50,10 @@ from medre.core.rendering.attribution import (
     build_relay_attribution,
     format_relay_prefix,
 )
+from medre.core.rendering.bridge_context import build_bridge_context
 from medre.core.rendering.relations import degrade_relations_inline
 from medre.core.rendering.renderer import RenderingContext, RenderingResult
+from medre.core.rendering.text_helpers import extract_message_body
 from medre.core.rendering.text_helpers import truncate_text as _truncate_text
 
 
@@ -159,7 +161,7 @@ class LxmfRenderer:
         RenderingResult
             The rendered LXMF content dict wrapped in a result.
         """
-        text = str(event.payload.get("text", event.payload.get("body", "")))
+        text = extract_message_body(event)
         title = str(event.payload.get("title", ""))
 
         # Determine fallback behaviour early — controls envelope relations
@@ -170,6 +172,12 @@ class LxmfRenderer:
         # the envelope carries an empty relations list to avoid duplicating
         # relation data as both structured fields and inline text.
         fields: dict[int, Any] = {}
+        prefix_template = self._resolve_prefix_template(ctx)
+        attr = (
+            self._extract_attribution_with_source(event, ctx)
+            if self._metadata_embedding or prefix_template
+            else None
+        )
 
         if self._metadata_embedding:
             meta_keys: dict[str, Any] = {}
@@ -184,6 +192,9 @@ class LxmfRenderer:
                 source_transport_id=event.source_transport_id,
                 source_channel_id=event.source_channel_id,
                 lineage=event.lineage,
+                bridge_context=build_bridge_context(
+                    event, attr, include_relations=not is_fallback
+                ),
             )
 
         if is_fallback:
@@ -193,11 +204,9 @@ class LxmfRenderer:
         # adapter config (target-aware). Extracted from event
         # attribution and formatted via the shared prefix formatter.
         # The prefix is for human readability only — the MEDRE metadata
-        # envelope in fields remains the authoritative provenance source.
+        # envelope in fields carries provenance claims, not identity authority.
         prefix_meta: dict[str, object] = {}
-        prefix_template = self._resolve_prefix_template(ctx)
-        if prefix_template:
-            attr = self._extract_attribution_with_source(event, ctx)
+        if prefix_template and attr is not None:
             prefix_result = format_relay_prefix(prefix_template, attr)
             # On formatting_exception the rendered_prefix is the raw
             # template — do NOT prepend it to user-facing text.
