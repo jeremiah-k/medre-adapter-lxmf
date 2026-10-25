@@ -17,13 +17,16 @@ Envelope structure::
         "source_channel_id": "<channel-id>" | None,
         "lineage": [...],
         "relations": [...],
-        "metadata_keys": [...]
+        "metadata_keys": [...],
+        "bridge_context": {...}  # optional bounded relay claims
     }
 """
 
 from __future__ import annotations
 
 from typing import Any
+
+from medre.core.rendering.bridge_context import normalize_bridge_context
 
 LXMF_FIELDS_ENVELOPE_SCHEMA_VERSION = 1
 
@@ -63,6 +66,7 @@ class LxmfFieldsHelper:
         source_transport_id: str | None = None,
         source_channel_id: str | None = None,
         lineage: tuple[str, ...] | None = None,
+        bridge_context: dict[str, Any] | None = None,
     ) -> dict[int, Any]:
         """Insert a MEDRE envelope into *fields* under the envelope key.
 
@@ -96,6 +100,8 @@ class LxmfFieldsHelper:
             Channel identifier, if applicable.
         lineage:
             Tuple of ancestor event IDs.
+        bridge_context:
+            Optional bounded source claims and relation hints shared with Matrix.
 
         Returns
         -------
@@ -138,6 +144,9 @@ class LxmfFieldsHelper:
             ),
             "metadata_keys": list(metadata.keys()) if metadata else [],
         }
+        context = normalize_bridge_context(bridge_context)
+        if context is not None:
+            envelope["bridge_context"] = context
         updated[FIELD_MEDRE_ENVELOPE] = {LXMF_NAMESPACE: envelope}
         return updated
 
@@ -177,7 +186,14 @@ class LxmfFieldsHelper:
                         return None
                     if "event_id" not in envelope:
                         return None
-                    return envelope
+                    # Context is a remote relay claim. Invalid or unknown fields
+                    # must not leak into canonical metadata or discard the text.
+                    result = dict(envelope)
+                    result.pop("bridge_context", None)
+                    context = normalize_bridge_context(envelope.get("bridge_context"))
+                    if context is not None:
+                        result["bridge_context"] = context
+                    return result
         except (AttributeError, TypeError):
             pass
 
