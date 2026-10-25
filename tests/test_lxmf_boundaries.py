@@ -947,3 +947,26 @@ class TestLxmfErrorClassification:
         )
         with pytest.raises(AdapterPermanentError, match="not started"):
             await adapter.deliver(result)
+
+
+@pytest.mark.parametrize(
+    "content,title", [(42, ""), (None, ""), (False, "caption"), ("ok", ["title"])]
+)
+async def test_lxmf_rejects_non_string_rendered_content_before_native_send(
+    content, title
+):
+    """Direct callers cannot turn structured values into a native LXMF message."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    adapter = LxmfAdapter(LxmfConfig(adapter_id="lxmf-1", connection_type="fake"))
+    send = AsyncMock()
+    adapter._started = True
+    adapter._session = SimpleNamespace(send_text=send)
+    result = RenderingResult(
+        event_id="invalid-wire", target_adapter="lxmf-1", target_channel=None,
+        payload={"content": content, "title": title, "destination_hash": "a" * 32},
+    )
+    with pytest.raises(AdapterPermanentError, match="must be text"):
+        await adapter.deliver(result)
+    send.assert_not_awaited()

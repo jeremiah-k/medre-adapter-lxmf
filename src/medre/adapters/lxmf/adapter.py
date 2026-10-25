@@ -656,6 +656,8 @@ class LxmfAdapter(AdapterContract):
         delivery_method = payload.get("delivery_method")
         fields = payload.get("fields")
 
+        if not isinstance(content, str) or not isinstance(title, str):
+            raise AdapterPermanentError("LXMF rendered content and title must be text")
         if not content and not title:
             raise AdapterPermanentError(
                 "LXMF renderer produced an empty title/content payload"
@@ -675,8 +677,8 @@ class LxmfAdapter(AdapterContract):
         try:
             native_id, delivery_state = await session.send_text(
                 destination_hash=str(destination_hash),
-                content=str(content),
-                title=str(title),
+                content=content,
+                title=title,
                 delivery_method=(str(delivery_method) if delivery_method else None),
                 fields=fields if isinstance(fields, dict) else None,
                 delivery_context=delivery_context,
