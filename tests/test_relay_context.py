@@ -217,3 +217,20 @@ async def test_styled_body_is_authoritative_while_legacy_alias_is_preserved(
         ),
     )
     assert result.payload["content"] == expected
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"body": "valid body", "text": 42},
+        {"body": 42, "text": "legacy"},
+        {"body": None, "text": "legacy", "formatting": {"version": 1, "spans": []}},
+    ],
+)
+async def test_malformed_canonical_text_never_becomes_native_content(payload):
+    """An invalid body or alias must not acquire a native LXMF wire value."""
+    with pytest.raises(ValueError, match="must be text"):
+        await renderer().render(
+            source_event(payload),
+            RenderingContext(target_adapter="lxmf-out", delivery_strategy="direct"),
+        )
