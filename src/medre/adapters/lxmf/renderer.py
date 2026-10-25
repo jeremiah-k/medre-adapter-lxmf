@@ -45,6 +45,7 @@ from typing import Any, Mapping
 from medre.adapters.lxmf.fields import LxmfFieldsHelper
 from medre.adapters.metadata import project_source_fields
 from medre.core.events import CanonicalEvent
+from medre.core.events.text import select_message_body
 from medre.core.rendering.attribution import (
     RelayAttribution,
     build_relay_attribution,
@@ -53,7 +54,6 @@ from medre.core.rendering.attribution import (
 from medre.core.rendering.bridge_context import build_bridge_context
 from medre.core.rendering.relations import degrade_relations_inline
 from medre.core.rendering.renderer import RenderingContext, RenderingResult
-from medre.core.rendering.text_helpers import extract_message_body
 from medre.core.rendering.text_helpers import truncate_text as _truncate_text
 
 
@@ -161,7 +161,7 @@ class LxmfRenderer:
         RenderingResult
             The rendered LXMF content dict wrapped in a result.
         """
-        text = extract_message_body(event)
+        text = select_message_body(event.payload)
         title = str(event.payload.get("title", ""))
 
         # Determine fallback behaviour early — controls envelope relations
