@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import math
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol, cast
 
@@ -30,6 +32,52 @@ class _ProcessPipes(Protocol):
     """Describe asyncio's private transport seam absent from Process stubs."""
 
     _transport: asyncio.SubprocessTransport
+
+
+class _ExitObservedProtocol(asyncio.SubprocessProtocol):
+    """Observe leader exit independently of stream EOF while preserving stream flow control.
+
+    Process.wait() can remain pending while a descendant retains a pipe. The
+    public subprocess protocol exit event arrives when the leader is reaped;
+    forwarding every other callback preserves asyncio's existing stream owner.
+    """
+
+    def __init__(
+        self, delegate: asyncio.SubprocessProtocol, exited: Callable[[], None]
+    ) -> None:
+        self._delegate = delegate
+        self._exited = exited
+
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        """Retain the stream protocol's transport initialization."""
+        self._delegate.connection_made(transport)
+
+    def pipe_data_received(self, fd: int, data: bytes) -> None:
+        """Feed the same bounded native protocol and diagnostic readers."""
+        self._delegate.pipe_data_received(fd, data)
+
+    def pipe_connection_lost(self, fd: int, exc: Exception | None) -> None:
+        """Preserve EOF/error handling for each owned pipe."""
+        self._delegate.pipe_connection_lost(fd, exc)
+
+    def process_exited(self) -> None:
+        """Record native exit before inherited pipes are required to close."""
+        try:
+            self._delegate.process_exited()
+        finally:
+            self._exited()
+
+    def pause_writing(self) -> None:
+        """Keep stdin drain backpressure attached to its original stream protocol."""
+        self._delegate.pause_writing()
+
+    def resume_writing(self) -> None:
+        """Resume existing stdin waiters without introducing another writer."""
+        self._delegate.resume_writing()
+
+    def connection_lost(self, exc: Exception | None) -> None:
+        """Complete the original stream teardown and its waiting callers."""
+        self._delegate.connection_lost(exc)
 
 
 @dataclass(frozen=True)
@@ -56,6 +104,7 @@ class NativeWorker:
         startup_timeout_seconds: float = 30.0,
         _command: tuple[str, ...] | None = None,
         message_plane: bool = False,
+        on_failure: Callable[[], None] | None = None,
     ) -> None:
         config.validate()
         if (
@@ -68,6 +117,7 @@ class NativeWorker:
             )
         self._config = config
         self._message_plane = message_plane
+        self._on_failure = on_failure
         self.channel: WorkerChannel | None = None
         self._failure_cleanup: asyncio.Task[None] | None = None
         self._reticulum_config_dir = (
@@ -90,6 +140,7 @@ class NativeWorker:
         self._startup_deadline: asyncio.Timeout | None = None
         self._shutdown_deadline: asyncio.Timeout | None = None
         self._stderr_tail = bytearray()
+        self._leader_exit_seen = False
 
     @property
     def pid(self) -> int | None:
@@ -121,10 +172,34 @@ class NativeWorker:
             env=native_environment(),
         )
         self._process = process
+        transport = cast(_ProcessPipes, process)._transport
+        protocol = transport.get_protocol()
+        if isinstance(protocol, asyncio.SubprocessProtocol):
+            transport.set_protocol(
+                _ExitObservedProtocol(protocol, self._on_worker_exit)
+            )
+        elif process.returncode is None:
+            raise LxmfConnectionError("Native worker exit observation is unavailable")
+        # Exit can precede observer installation; the retained Process owns
+        # its return code, so no PID probing or second child reaper is needed.
+        if process.returncode is not None:
+            self._on_worker_exit()
         self._stderr = asyncio.create_task(
             self._drain_stderr(process), name="lxmf-worker-stderr"
         )
         return process
+
+    def _on_worker_exit(self) -> None:
+        """Feed unexpected leader exit into the same fail-closed channel/cleanup owner."""
+        if self._leader_exit_seen:
+            return
+        self._leader_exit_seen = True
+        if self._stopping is not None or self._ready is None:
+            return
+        if self.channel is not None:
+            self.channel._fail("Native worker process exited")
+        else:
+            self._schedule_failed_cleanup()
 
     async def _drain_stderr(self, process: asyncio.subprocess.Process) -> None:
         """Drain SDK output with bounded private retention, never health/log echo."""
@@ -164,6 +239,7 @@ class NativeWorker:
                     or not reply.connected
                     or not reply.router_running
                     or self._stopping is not None
+                    or process.returncode is not None
                 ):
                     raise LxmfConnectionError("Native worker exited without readiness")
                 self._ready = reply
@@ -185,6 +261,13 @@ class NativeWorker:
             self._failure_cleanup = asyncio.create_task(
                 self._cleanup_failed_channel(), name="lxmf-failed-generation"
             )
+        if self._on_failure is not None:
+            try:
+                self._on_failure()
+            except Exception as exc:
+                logging.getLogger(__name__).warning(
+                    "LXMF worker health observer failed (%s)", type(exc).__name__
+                )
 
     async def _cleanup_failed_channel(self) -> None:
         """Contain cleanup errors; callers retain the channel's explicit failure."""

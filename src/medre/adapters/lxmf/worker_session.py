@@ -8,6 +8,7 @@ import logging
 import time
 import uuid
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -77,6 +78,8 @@ class WorkerSession:
         self._delivery_destination_hash: bytes | None = None
         self._last_error: str | None = None
         self._status_delayed = False
+        self._health_callback: Callable[[], None] | None = None
+        self._health_epoch = 0
         self._logger = logging.getLogger(f"medre.adapters.{config.adapter_id}")
 
     @property
@@ -103,12 +106,34 @@ class WorkerSession:
         """Report a bounded status-probe timeout without killing active sends."""
         return self._status_delayed
 
+    def set_health_callback(self, callback: Callable[[], None] | None) -> None:
+        """Observe local worker/router facts without sending native status requests."""
+        self._health_callback = callback
+
+    def _notify_health_change(self, epoch: int) -> None:
+        """Ignore retired generations and isolate optional diagnostic consumers."""
+        if (
+            epoch != self._health_epoch
+            or not self._started
+            or self._closing
+            or self._health_callback is None
+        ):
+            return
+        try:
+            self._health_callback()
+        except Exception as exc:
+            self._logger.warning(
+                "LXMF session health observer failed (%s)", type(exc).__name__
+            )
+
     async def start(self, message_callback: MessageCallback | None = None) -> None:
         """Start a fresh generation and establish callbacks before consuming data."""
         if self._started:
             return
         if any(not task.done() for task in self._consumers):
             raise LxmfConnectionError("Previous native callbacks have not stopped")
+        self._health_epoch += 1
+        epoch = self._health_epoch
         self._stopping = None
         self._contexts.clear()
         self._names.clear()
@@ -120,6 +145,7 @@ class WorkerSession:
             self._config,
             reticulum_config_dir=self._reticulum_config_dir,
             message_plane=True,
+            on_failure=lambda: self._notify_health_change(epoch),
             _command=self._command,
         )
         ready = await self._worker.start()
@@ -334,22 +360,35 @@ class WorkerSession:
             raise
 
     async def refresh(self) -> None:
-        """Refresh safe native diagnostics with an independent bounded probe."""
-        if not self.connected or self._worker is None or self._worker.channel is None:
+        """Refresh local diagnostics only when explicitly requested by a caller."""
+        worker = self._worker
+        epoch = self._health_epoch
+        if not self.connected or worker is None or worker.channel is None:
             return
         try:
-            reply = await self._worker.channel.exchange(
+            reply = await worker.channel.exchange(
                 GetStatus(uuid.uuid4().hex), timeout=2
             )
+            if (
+                epoch != self._health_epoch
+                or worker is not self._worker
+                or self._closing
+            ):
+                return
             if not isinstance(reply, Status):
-                self._worker.channel._fail(
-                    "Native status returned the wrong response type"
-                )
+                worker.channel._fail("Native status returned the wrong response type")
                 return
             self._diag = reply.diagnostics
             self._status_delayed = False
         except (LxmfSendError, LxmfConnectionError):
+            if (
+                epoch != self._health_epoch
+                or worker is not self._worker
+                or self._closing
+            ):
+                return
             self._status_delayed = True
+        self._notify_health_change(epoch)
 
     def diagnostics(self) -> LxmfSessionDiagnostics:
         """Return cached native scalars without importing an SDK or probing peers."""

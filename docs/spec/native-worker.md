@@ -197,3 +197,27 @@ expected identity, requires acknowledged clean exits and verifies that host
 signal handlers retain ownership. It does not establish message delivery,
 peer reachability or worker data-plane qualification. Run the core's native
 adapter campaign separately for bidirectional RF traffic and rendering evidence.
+
+## Native health notifications
+
+The provider MUST use the same retained native state for health probes and the
+optional `AdapterContext.report_health` sink. Reports MUST describe settled
+`healthy`, `degraded` or `failed` observations for the bound adapter. Startup and
+stop MUST delimit the reporting lifetime; retired callbacks MUST NOT publish
+for a replacement. Observer exceptions MUST NOT interrupt native operations,
+release ownership, create receipts or authorize another send. Contexts without
+the sink retain explicit-probe compatibility.
+
+Worker-channel EOF, protocol failure and local process failure MUST update
+health through the existing failure-cleanup hook, independently of inbound queue
+capacity. Existing explicit local-status requests MAY report delayed status or
+its recovery; notifications MUST NOT issue recursive status requests or peer
+probes. Old-generation status replies and callbacks MUST NOT update a replacement
+worker. The health scope remains local session/router liveness; remote peer
+reachability remains unknown.
+
+Native leader exit MUST be observed independently of stdout/stderr EOF. The
+exit notification MUST feed the existing failed-channel cleanup owner, preserve
+uncertain handoffs, and retire descendants through the reserved process group.
+The observer MUST preserve the original stream protocol's data, EOF and write
+backpressure callbacks; it MUST NOT poll PIDs or reap the child independently.

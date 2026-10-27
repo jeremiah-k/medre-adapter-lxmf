@@ -1440,16 +1440,14 @@ class TestFakeLxmfAdapterRepeatedStop:
 
 
 class TestLxmfLastHealthLifecycleBoundary:
-    """_last_health is cleared at start/stop boundaries.
+    """Startup replaces retired health and stop clears the native observation.
 
-    Regression: cached _last_health must be reset to None on start()
-    and stop() so diagnostics never reports a stale health string from
-    a previous session.
+    A successful start publishes the owned local session's health before an
+    explicit probe; diagnostics cannot retain a retired session's failure.
     """
 
-    async def test_last_health_cleared_on_start(self, make_adapter_context) -> None:
-        """start() clears _last_health so a stale value from a prior
-        session does not leak into diagnostics."""
+    async def test_last_health_published_on_start(self, make_adapter_context) -> None:
+        """Startup replaces stale health with the owned local session readiness."""
         config = _make_config(connection_type="fake")
         adapter = LxmfAdapter(config)
         ctx = make_adapter_context("lxmf-1")
@@ -1458,7 +1456,7 @@ class TestLxmfLastHealthLifecycleBoundary:
         adapter._last_health = "failed"
 
         await adapter.start(ctx)
-        assert adapter._last_health is None
+        assert adapter._last_health == "healthy"
 
         await adapter.stop()
 
