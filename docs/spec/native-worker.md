@@ -221,3 +221,28 @@ exit notification MUST feed the existing failed-channel cleanup owner, preserve
 uncertain handoffs, and retire descendants through the reserved process group.
 The observer MUST preserve the original stream protocol's data, EOF and write
 backpressure callbacks; it MUST NOT poll PIDs or reap the child independently.
+
+
+## Stopped-state capture scope
+
+Real LXMF MUST return ``unsupported`` for the generic complete-installation
+planner until a coherent pinned-SDK native export, restoration,
+and shared-owner exclusion procedure is qualified. ``storage/database`` MUST
+NOT be selected: RNS records such as ``known_destinations``,
+``destination_table``, ``transport_identity``, and ``packet_hashlist.raw``
+are binary/conditional native state, not a SQLite store. The LXMF router also
+writes native queue and propagation state under ``storagepath`` and may share
+a Reticulum singleton or external daemon. Direct delivery does not prove
+that shared state is quiescent; propagated delivery has additional queue
+ownership and remote-state limitations.
+
+The SDK-free declaration MUST report the real worker ``.medre-handoffs.sqlite``
+ledger and actual configured or generated identity as required *selected*
+bytes, whether the supplied identity path is in-root or not; the planner
+MUST still refuse incomplete native coverage. The ``.medre-worker.lock``
+flock inode is excluded from copied state. The worker's dual local flocks
+MUST be retained only on existing regular files, with partial acquisition
+cleanup, and MUST NOT be described as shared-Reticulum exclusion or as a
+post-restore ownership grant. Unconfigured default Reticulum paths MUST NOT
+be guessed by running RNS inside stopped maintenance. An independently
+qualified provider export is required before complete-installation support.
