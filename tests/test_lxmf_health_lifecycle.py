@@ -1,7 +1,7 @@
 """LXMF adapter health lifecycle parity tests.
 
-Verifies the phase rule: health is None before first health_check of a
-lifecycle; health clears on start, stop, and restart boundaries.
+Fresh and stopped diagnostics remain unset. Completed startup publishes local
+readiness without an explicit probe, and restart replaces the retired cache.
 
 The health string describes LOCAL session/router liveness only.  It
 must track the owned session's observable lifecycle: a started adapter
@@ -10,10 +10,10 @@ whose local session has been torn down reports "failed", never
 and is reported separately in diagnostics as an explicit "unknown".
 
 Tests cover:
-- diagnostics()["health"] is None before first health_check
+- Fresh diagnostics are unset before startup or an explicit health check
 - health_check populates _last_health
 - stop() clears health to None
-- start() clears health to None (restart boundary)
+- Startup publishes readiness for its own lifetime
 - Health after stop is "unknown" (not cached from prior session)
 - Started adapter with a stopped local session reports "failed"
 - diagnostics expose health_scope and peer_reachability truthfully
@@ -69,7 +69,7 @@ async def test_health_check_populates_last_health(
     ctx = make_adapter_context("lxmf-health-test")
     await adapter.start(ctx)
 
-    assert adapter._last_health is None  # Not yet checked
+    assert adapter._last_health == "healthy"  # Published during startup
 
     info = await adapter.health_check()
     assert info.health == "healthy"
@@ -118,13 +118,13 @@ async def test_health_clears_on_start_restart(
     adapter._last_health = "failed"
 
     await adapter.start(ctx)
-    assert adapter._last_health is None
+    assert adapter._last_health == "healthy"
 
     await adapter.stop()
 
 
 # ===================================================================
-# Full restart cycle: health None → healthy → None → None → healthy
+# Full restart cycle: startup publishes health; stop clears the cache
 # ===================================================================
 
 
@@ -142,9 +142,9 @@ async def test_health_through_full_restart_cycle(
     # Before start: health is None
     assert adapter.diagnostics()["health"] is None
 
-    # Start: health cleared
+    # Start: the owned session publishes local readiness
     await adapter.start(ctx)
-    assert adapter._last_health is None
+    assert adapter._last_health == "healthy"
 
     # Check: health populated
     info = await adapter.health_check()
@@ -156,9 +156,9 @@ async def test_health_through_full_restart_cycle(
     assert adapter._last_health is None
     assert adapter.diagnostics()["health"] is None
 
-    # Restart: health cleared
+    # Restart: replacement readiness supersedes the retired cache
     await adapter.start(ctx)
-    assert adapter._last_health is None
+    assert adapter._last_health == "healthy"
 
     # Check again: health populated fresh
     info = await adapter.health_check()

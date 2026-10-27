@@ -154,8 +154,10 @@ class LxmfAdapter(AdapterContract):
         self._background_tasks: set[asyncio.Task[Any]] = set()
         self._observation_tasks: set[asyncio.Task[Any]] = set()
 
-        # Cached health string from last health_check() call.
+        # Cached local health from an explicit probe or native observation.
         self._last_health: str | None = None
+        self._health_epoch = 0
+        self._reported_health: str | None = None
 
         # Inbound evidence counters.  LXMF does not expose packet classes
         # like Meshtastic, so these count normalized message decisions.
@@ -295,6 +297,9 @@ class LxmfAdapter(AdapterContract):
         # Clear cached health at lifecycle boundary so diagnostics
         # never reports a stale health string from a previous session.
         self._last_health = None
+        self._health_epoch += 1
+        self._reported_health = None
+        health_epoch = self._health_epoch
 
         self._reset_inbound_evidence()
         self.ctx = ctx
@@ -313,6 +318,10 @@ class LxmfAdapter(AdapterContract):
         if self._session is None:
             self._session = self._new_session()
         session = self._session
+        if isinstance(session, WorkerSession):
+            session.set_health_callback(
+                lambda: self._report_native_health(health_epoch)
+            )
         try:
             await session.start(
                 message_callback=self._on_packet,
@@ -354,6 +363,7 @@ class LxmfAdapter(AdapterContract):
 
         self._mark_started(ctx)
         self._started = True
+        self._report_native_health(health_epoch)
         ctx.logger.info(
             "LxmfAdapter %s started (mode=%s)",
             self.adapter_id,
@@ -382,6 +392,8 @@ class LxmfAdapter(AdapterContract):
         timeout:
             Maximum seconds to wait for a clean shutdown.
         """
+        self._health_epoch += 1
+        self._reported_health = None
         if not self._started:
             # Still clean up any lingering session from a failed/cancelled start.
             if self._session is not None:
@@ -461,6 +473,26 @@ class LxmfAdapter(AdapterContract):
         """
         if self._started and isinstance(self._session, WorkerSession):
             await self._session.refresh()
+        return self._health_info()
+
+    def _report_native_health(self, epoch: int) -> None:
+        """Report local native-owner health without refreshing or probing peers."""
+        if epoch != self._health_epoch or not self._started or self.ctx is None:
+            return
+        info = self._health_info()
+        report = getattr(self.ctx, "report_health", None)
+        if report is None or self._reported_health == info.health:
+            return
+        try:
+            report(info)
+            self._reported_health = info.health
+        except Exception as exc:
+            self.ctx.logger.warning(
+                "LXMF health notification failed (%s)", type(exc).__name__
+            )
+
+    def _health_info(self) -> AdapterInfo:
+        """Project cached local router/process facts; remote reachability stays unknown."""
         if not self._started:
             health = "unknown"
         elif (
