@@ -156,6 +156,7 @@ _RECONNECT_JITTER_FRACTION: float = 0.25  # ±25 %
 
 # Outbound delivery retry.
 _SEND_MAX_RETRIES: int = 3
+_DESTINATION_DISCOVERY_TIMEOUT: float = 10.0
 
 # Maximum tracked outbound deliveries before oldest are evicted.
 # Prevents unbounded dict growth in long-duration runs where
@@ -1627,6 +1628,33 @@ class LxmfSession:
     # Outbound send (real)
     # ------------------------------------------------------------------
 
+    async def _destination_identity(self, rns: Any, destination: bytes) -> Any:
+        """Resolve a valid contact before any native message submission.
+
+        Reticulum's cache can be empty or still converging after startup. Ask
+        the native transport for the path once and wait within the worker's
+        exchange budget. Missing discovery is a retryable pre-handoff outcome;
+        no message is constructed or handed to the router during this wait.
+        """
+        identity = rns.Identity.recall(destination)
+        if identity is not None:
+            return identity
+        try:
+            rns.Transport.request_path(destination)
+            async with asyncio.timeout(_DESTINATION_DISCOVERY_TIMEOUT):
+                while identity is None:
+                    await asyncio.sleep(0.05)
+                    identity = rns.Identity.recall(destination)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            self._diag.transient_delivery_failures += 1
+            self._diag.last_error = "Native destination discovery is pending"
+            raise LxmfSendError(
+                "Native destination discovery is pending", transient=True
+            ) from None
+        return identity
+
     async def _send_real(
         self,
         destination_hash: str,
@@ -1671,6 +1699,8 @@ class LxmfSession:
         # Parse destination hash.
         try:
             dest_bytes = bytes.fromhex(destination_hash)
+            if len(dest_bytes) != 16:
+                raise ValueError("destination hash requires 16 bytes")
         except (ValueError, TypeError) as exc:
             raise LxmfSendError(
                 f"Invalid destination hash: {destination_hash!r}",
@@ -1686,21 +1716,10 @@ class LxmfSession:
             if self._config.message_delay_seconds > 0:
                 await asyncio.sleep(self._config.message_delay_seconds)
 
+            dest_identity = await self._destination_identity(RNS, dest_bytes)
             last_exc: Exception | None = None
             for attempt in range(1, _SEND_MAX_RETRIES + 1):
                 try:
-                    # Recall identity inside the retry loop so recall failures
-                    # are classified as non-transient errors and downstream
-                    # construction failures can be retried.  (RNS caches recall
-                    # results, so repeated calls are cheap.)
-                    dest_identity = RNS.Identity.recall(dest_bytes)
-                    if dest_identity is None:
-                        raise LxmfSendError(
-                            f"Cannot recall identity for destination hash "
-                            f"{destination_hash!r}",
-                            transient=False,
-                        )
-
                     # Construct destination inside the retry block so that
                     # construction errors are caught and classified.
                     dest = RNS.Destination(

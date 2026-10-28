@@ -81,11 +81,11 @@ async def test_message_worker_persists_generated_identity_and_refuses_concurrent
                 await competing.start()
         finally:
             await competing.stop()
-        # A never-announced destination is a known pre-handoff refusal.
+        # A never-announced destination is a retryable pre-handoff discovery refusal.
         with pytest.raises(LxmfSendError) as failure:
             await session.send_text("ee" * 16, "no native route")
-        assert not failure.value.transient
-        assert "recall identity" in str(failure.value)
+        assert failure.value.transient
+        assert "discovery is pending" in str(failure.value)
         await session.refresh()
         assert session.connected
     finally:

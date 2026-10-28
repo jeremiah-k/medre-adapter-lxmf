@@ -265,3 +265,13 @@ Endpoint leases exclude competing owners of the same LXMF profile. They MUST
 NOT be described as exclusive ownership of a shared Reticulum network service.
 Independent applications may share that service with separate LXMF identities
 and storage profiles.
+
+
+## Destination discovery before handoff
+
+A syntactically valid destination absent from the native identity cache MUST
+trigger a native path request before message construction. Discovery MUST be
+bounded within the worker exchange timeout. An unresolved path MUST remain a
+retryable pre-handoff refusal, not permanent recipient failure or SDK acceptance.
+Cancellation MUST propagate without a native payload submission. Discovering a
+path MUST NOT retry a message whose native handoff outcome is uncertain.
