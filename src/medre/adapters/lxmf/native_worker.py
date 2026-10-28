@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
 import contextlib
 import logging
 import os
@@ -36,12 +37,33 @@ from medre.adapters.lxmf.worker_state import (
     payload_digest,
 )
 from medre.core.observability.sanitization import sanitize_error
+from medre.config.adapters.lxmf import LxmfConfig
 
 
 def _write(stream: BinaryIO, message: Message) -> None:
     """Publish a complete frame independently of SDK stdout logging."""
     stream.write(encode(message))
     stream.flush()
+
+
+def _retain_profile(config: LxmfConfig, *, message_plane: bool) -> WorkerProfile | None:
+    """Keep native identity and queue ownership through SDK exit callbacks.
+
+    Real control probes also initialize LXMRouter and its ratchets, so they
+    need the same endpoint leases as message workers. Register cleanup before
+    SDK construction: later native atexit callbacks persist their state first.
+    The process owns this profile until exit, independently of session stop.
+    """
+    if not message_plane and config.connection_type == "fake":
+        return None
+    profile = WorkerProfile(config)
+    try:
+        profile.retain_until_process_exit()
+    except BaseException:
+        profile.close()
+        raise
+    atexit.register(profile.close)
+    return profile
 
 
 async def _run(stream: BinaryIO) -> None:
@@ -56,16 +78,11 @@ async def _run(stream: BinaryIO) -> None:
     if not isinstance(first, Start):
         raise RuntimeError("Native worker requires a start frame")
     first.config.validate()
-    profile = WorkerProfile(first.config) if first.message_plane else None
+    profile = _retain_profile(first.config, message_plane=first.message_plane)
     config = profile.config if profile is not None else first.config
-    try:
-        session = LxmfSession(
-            config, config.adapter_id, reticulum_config_dir=first.reticulum_config_dir
-        )
-    except BaseException:
-        if profile is not None:
-            profile.close()
-        raise
+    session = LxmfSession(
+        config, config.adapter_id, reticulum_config_dir=first.reticulum_config_dir
+    )
     output: asyncio.Queue[Message] = asyncio.Queue(maxsize=128)
     overflow = asyncio.Event()
     writer: asyncio.Task[None] | None = None
@@ -274,11 +291,7 @@ async def _run(stream: BinaryIO) -> None:
             *(task for task in (read_task, writer, overflow_task) if task is not None),
             return_exceptions=True,
         )
-        try:
-            await session.stop()
-        finally:
-            if profile is not None:
-                profile.close()
+        await session.stop()
 
 
 def main() -> None:

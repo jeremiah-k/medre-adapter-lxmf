@@ -246,3 +246,19 @@ cleanup, and MUST NOT be described as shared-Reticulum exclusion or as a
 post-restore ownership grant. Unconfigured default Reticulum paths MUST NOT
 be guessed by running RNS inside stopped maintenance. An independently
 qualified provider export is required before complete-installation support.
+
+
+## Endpoint ownership through process exit
+
+Every real native worker, including control probes, MUST acquire the endpoint
+queue and identity leases before constructing an SDK router. Session shutdown
+MUST NOT release those leases while native process-exit handlers can persist
+ratchets, duplicate-suppression state, or router metadata. Profile cleanup MUST
+be registered before SDK construction so native exit callbacks finish before
+the leases are released. A killed process releases its OS locks without
+asserting that uncommitted native state was flushed.
+
+Endpoint leases exclude competing owners of the same LXMF profile. They MUST
+NOT be described as exclusive ownership of a shared Reticulum network service.
+Independent applications may share that service with separate LXMF identities
+and storage profiles.
