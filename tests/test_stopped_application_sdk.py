@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import sqlite3
 import sys
 import tempfile
@@ -14,30 +13,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from medre_lxmf_tests.helpers.native_chat_events import (
+    command as _command,
+    event as _event,
+    inbound as _inbound,
+)
 
 pytestmark = pytest.mark.lxmf_sdk
-
-
-async def _event(process, kind, *, address=None):
-    """Wait for a concrete peer event rather than sleeping for native timing."""
-    async with asyncio.timeout(20):
-        while True:
-            line = await process.stdout.readline()
-            if not line:
-                raise AssertionError("native peer exited before its expected event")
-            event = json.loads(line)
-            if event["event"] == "received" and kind != "received":
-                raise AssertionError("unsolicited native peer delivery")
-            if event["event"] == kind and (
-                address is None or event.get("address") == address
-            ):
-                return event
-
-
-async def _command(process, **command):
-    """Send only local qualification commands to the independent native peer."""
-    process.stdin.write((json.dumps(command) + "\n").encode())
-    await process.stdin.drain()
 
 
 @asynccontextmanager
@@ -106,6 +88,7 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
         connection_type="reticulum",
         storage_path=str(root / "endpoint"),
         reticulum_config_dir=str(network),
+        display_name="before-restore-" + uuid.uuid4().hex,
         stamp_cost=0,
         message_delay_seconds=0,
         announce_interval_seconds=0.2,
@@ -125,7 +108,9 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
             try:
                 await session.start(inbound.put_nowait)
                 address = session._delivery_destination_hash.hex()
-                await _event(peer, "announce", address=address)
+                await _event(
+                    peer, "announce", address=address, display_name=config.display_name
+                )
                 await _command(peer, command="announce")
                 await _event(peer, "announced")
                 await _command(
@@ -134,7 +119,7 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
                     destination=address,
                     content="Hello from an LXMF chat ☃",
                 )
-                assert (await asyncio.wait_for(inbound.get(), 20))[
+                assert (await _inbound(inbound, peer, session))[
                     "content"
                 ] == "Hello from an LXMF chat ☃"
                 await session.send_text(
@@ -143,6 +128,10 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
                 assert (await _event(peer, "received"))[
                     "content"
                 ] == "[Alice/mesh] Reply through MEDRE ☃"
+                await _command(peer, command="status", token="before-stop")
+                native_state = await _event(peer, "status", token="before-stop")
+                assert native_state["attached"]
+                assert native_state["delivery_attempts"] >= 1
             finally:
                 await session.stop()
 
@@ -186,7 +175,13 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
             assert (root / "endpoint/.medre-identity").read_bytes() == (
                 restored / "endpoint/.medre-identity"
             ).read_bytes()
-            resumed_config = replace(config, storage_path=str(restored / "endpoint"))
+            # Change only the advertised name to identify this worker lifetime;
+            # the restored private identity and LXMF address remain the same.
+            resumed_config = replace(
+                config,
+                storage_path=str(restored / "endpoint"),
+                display_name="after-restore-" + uuid.uuid4().hex,
+            )
             held = WorkerProfile(resumed_config)
             try:
                 assert held.begin("accepted-sentinel", b"accepted").status == "accepted"
@@ -200,7 +195,12 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
             try:
                 await resumed.start(resumed_inbound.put_nowait)
                 assert resumed._delivery_destination_hash.hex() == address
-                await _event(peer, "announce", address=address)
+                await _event(
+                    peer,
+                    "announce",
+                    address=address,
+                    display_name=resumed_config.display_name,
+                )
                 await _command(peer, command="announce")
                 await _event(peer, "announced")
 
@@ -220,7 +220,7 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
                     destination=address,
                     content="The same contact after restore",
                 )
-                assert (await asyncio.wait_for(resumed_inbound.get(), 20))[
+                assert (await _inbound(resumed_inbound, peer, resumed))[
                     "content"
                 ] == "The same contact after restore"
                 if first_direction == "inbound":

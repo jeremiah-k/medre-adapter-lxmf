@@ -47,7 +47,11 @@ def main() -> None:
         aspect_filter = "lxmf.delivery"
 
         def received_announce(self, destination_hash, announced_identity, app_data):
-            emit(event="announce", address=destination_hash.hex())
+            emit(
+                event="announce",
+                address=destination_hash.hex(),
+                display_name=LXMF.display_name_from_app_data(app_data),
+            )
 
     router.register_delivery_callback(delivered)
     RNS.Transport.register_announce_handler(Announces())
@@ -57,6 +61,7 @@ def main() -> None:
         address=destination.hash.hex(),
         attached=reticulum.is_connected_to_shared_instance,
     )
+    last_message = None
     for line in sys.stdin:
         request = json.loads(line)
         if request["command"] == "stop":
@@ -64,6 +69,22 @@ def main() -> None:
         if request["command"] == "announce":
             router.announce(destination.hash)
             emit(event="announced")
+        elif request["command"] == "status":
+            # Inspect only this campaign's last submission; never alter the
+            # cached link or routing state whose recovery is being qualified.
+            target = last_message.get_destination().hash if last_message else None
+            direct = router.direct_links.get(target)
+            backchannel = router.backchannel_links.get(target)
+            emit(
+                event="status",
+                token=request["token"],
+                message_state=last_message.state if last_message else None,
+                delivery_attempts=last_message.delivery_attempts if last_message else 0,
+                direct_link_status=direct.status if direct else None,
+                backchannel_link_status=backchannel.status if backchannel else None,
+                path_known=RNS.Transport.has_path(target) if target else None,
+                attached=reticulum.is_connected_to_shared_instance,
+            )
         elif request["command"] == "send":
             target = bytes.fromhex(request["destination"])
             remote = RNS.Identity.recall(target)
@@ -78,6 +99,7 @@ def main() -> None:
                 request["content"],
                 desired_method=LXMF.LXMessage.DIRECT,
             )
+            last_message = message
             router.handle_outbound(message)
             emit(event="submitted")
 
