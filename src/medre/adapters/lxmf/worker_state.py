@@ -50,6 +50,7 @@ class WorkerProfile:
         self.config = config
         self._leases: list[BinaryIO] = []
         self._db: sqlite3.Connection | None = None
+        self._exit_lease_fds: list[int] = []
         try:
             if config.storage_path:
                 root = Path(config.storage_path).expanduser().resolve()
@@ -185,8 +186,33 @@ class WorkerProfile:
                 ),
             )
 
+    def retain_until_process_exit(self) -> None:
+        """Keep POSIX flock ownership until this native worker actually exits.
+
+        The raw duplicate descriptors intentionally have process lifetime and
+        remain close-on-exec. Python cleanup can close the journal and original
+        streams after SDK exit handlers while these references fence any late
+        native writes. Only the native worker calls this method; the OS releases
+        the descriptors on normal termination or kill.
+        """
+        if os.name != "posix" or self._exit_lease_fds:
+            return
+        retained = []
+        try:
+            for stream in self._leases:
+                retained.append(os.dup(stream.fileno()))
+        except BaseException:
+            for descriptor in retained:
+                os.close(descriptor)
+            raise
+        self._exit_lease_fds = retained
+
     def close(self) -> None:
-        """Close the journal before releasing queue and identity ownership."""
+        """Close the journal and session handles after native persistence.
+
+        POSIX descriptors transferred to process ownership remain held until
+        OS process exit, including after Python-level cleanup completes.
+        """
         if self._db is not None:
             self._db.close()
             self._db = None
