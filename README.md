@@ -119,14 +119,22 @@ The default pytest selection excludes SDK, service, hardware, local integration,
 and soak tiers. Installing SDKs afterward leaves the same environment SDK-enabled;
 use a fresh environment for a new SDK-free proof.
 
-Deterministic local endpoint integration is also owned here. After installing
+Local endpoint integration is also owned here. After installing
 the SDK tier, select it explicitly:
 
 ```bash
 python -m pytest -v -m "local_integration and not soak and not live and not hardware and not docker"
 ```
 
-Soak remains opt-in and is separate from deterministic local integration.
+The shared-Reticulum capture/restore campaign starts an independent service,
+chat peer, and MEDRE worker. It carries both `lxmf_sdk` and `local_integration`
+marks, so the SDK API-contract selection excludes it and the dedicated local
+integration selection includes both restore directions. Standalone CI runs
+local integration on Python 3.13 and 3.14, retaining the interpreter coverage
+that exposed the restore timeout. Core's required local integration job also
+runs the campaign against its pinned adapter revision.
+
+Soak remains opt-in and separate from local integration.
 
 ## Fake smoke sources
 
