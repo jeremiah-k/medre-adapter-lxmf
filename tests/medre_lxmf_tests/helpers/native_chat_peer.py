@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import sys
 import threading
+import time
 from pathlib import Path
 
 
@@ -62,6 +63,7 @@ def main() -> None:
         attached=reticulum.is_connected_to_shared_instance,
     )
     last_message = None
+    accepted_at = None
     for line in sys.stdin:
         request = json.loads(line)
         if request["command"] == "stop":
@@ -84,6 +86,22 @@ def main() -> None:
                 backchannel_link_status=backchannel.status if backchannel else None,
                 path_known=RNS.Transport.has_path(target) if target else None,
                 attached=reticulum.is_connected_to_shared_instance,
+                accepted_age_seconds=(
+                    time.monotonic() - accepted_at if accepted_at is not None else None
+                ),
+                direct_link_age_seconds=(
+                    max(0, time.time() - direct.request_time) if direct else None
+                ),
+                direct_link_timeout_seconds=(
+                    direct.establishment_timeout if direct else None
+                ),
+                direct_link_expected_hops=direct.expected_hops if direct else None,
+                retry_due_in_seconds=(
+                    max(0, last_message.next_delivery_attempt - time.time())
+                    if last_message and hasattr(last_message, "next_delivery_attempt")
+                    else None
+                ),
+                outbound_processing_locked=router.outbound_processing_lock.locked(),
             )
         elif request["command"] == "send":
             target = bytes.fromhex(request["destination"])
@@ -101,7 +119,8 @@ def main() -> None:
             )
             last_message = message
             router.handle_outbound(message)
-            emit(event="submitted")
+            accepted_at = time.monotonic()
+            emit(event="submitted", token=request["token"])
 
 
 if __name__ == "__main__":

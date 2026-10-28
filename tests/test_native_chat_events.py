@@ -7,7 +7,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from medre_lxmf_tests.helpers.native_chat_events import event, inbound
+from medre_lxmf_tests.helpers.native_chat_events import event, inbound, submit
 
 
 def _peer(*observations):
@@ -65,6 +65,10 @@ async def test_inbound_deadline_records_native_state_without_resending():
                             "message_state": 3,
                             "delivery_attempts": 1,
                             "direct_link_status": 2,
+                            "accepted_age_seconds": 20.0,
+                            "direct_link_age_seconds": 1.5,
+                            "direct_link_timeout_seconds": 11.0,
+                            "retry_due_in_seconds": 4.0,
                         }
                     )
                     + "\n"
@@ -88,6 +92,9 @@ async def test_inbound_deadline_records_native_state_without_resending():
     assert '"delivery_attempts": 1' in str(failure.value)
     assert '"direct_link_status": 2' in str(failure.value)
     assert '"connected": true' in str(failure.value)
+    assert '"direct_link_age_seconds": 1.5' in str(failure.value)
+    assert '"direct_link_timeout_seconds": 11.0' in str(failure.value)
+    assert '"accepted_age_seconds": 20.0' in str(failure.value)
 
 
 async def test_inbound_success_does_not_probe_native_state():
@@ -116,3 +123,44 @@ async def test_unavailable_peer_diagnostics_preserve_delivery_failure():
         await inbound(asyncio.Queue(), peer, session, timeout=0)
     assert "status_unavailable" in str(failure.value)
     assert '"connected": false' in str(failure.value)
+
+
+async def test_submission_waits_for_its_native_owner_acknowledgement():
+    """An unrelated token cannot advance the receive phase or cause resubmission."""
+    reader = asyncio.StreamReader()
+    commands = []
+
+    class Writer:
+        def write(self, data):
+            request = json.loads(data)
+            commands.append(request)
+            for token in ("other-attempt", request["token"]):
+                reader.feed_data(
+                    (json.dumps({"event": "submitted", "token": token}) + "\n").encode()
+                )
+
+        async def drain(self):
+            pass
+
+    peer = SimpleNamespace(stdin=Writer(), stdout=reader)
+    await submit(peer, destination="contact", content="expected")
+    assert len(commands) == 1
+    assert commands[0]["command"] == "send"
+    assert commands[0]["content"] == "expected"
+
+
+async def test_written_control_command_is_not_native_acceptance():
+    """A closed native event stream cannot turn pipe drain into a submitted fact."""
+    reader = asyncio.StreamReader()
+    reader.feed_eof()
+
+    class Writer:
+        def write(self, data):
+            pass
+
+        async def drain(self):
+            pass
+
+    peer = SimpleNamespace(stdin=Writer(), stdout=reader)
+    with pytest.raises(AssertionError, match="exited before its expected event"):
+        await submit(peer, destination="contact", content="expected")

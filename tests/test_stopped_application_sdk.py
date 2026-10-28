@@ -17,6 +17,7 @@ from medre_lxmf_tests.helpers.native_chat_events import (
     command as _command,
     event as _event,
     inbound as _inbound,
+    submit as _submit,
 )
 
 # This campaign starts an independent Reticulum service and a live native peer.
@@ -116,9 +117,8 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
                 )
                 await _command(peer, command="announce")
                 await _event(peer, "announced")
-                await _command(
+                await _submit(
                     peer,
-                    command="send",
                     destination=address,
                     content="Hello from an LXMF chat ☃",
                 )
@@ -217,9 +217,8 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
 
                 if first_direction == "outbound":
                     await outbound_roundtrip()
-                await _command(
+                await _submit(
                     peer,
-                    command="send",
                     destination=address,
                     content="The same contact after restore",
                 )

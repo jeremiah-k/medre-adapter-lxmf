@@ -35,6 +35,20 @@ async def event(process, kind, *, timeout=20, **expected):
                 return observation
 
 
+async def submit(peer, *, destination, content, timeout=20):
+    """Wait for this peer submission's acceptance before its delivery deadline.
+
+    Draining the control pipe proves only that a command was written. The
+    native owner acknowledges after handle_outbound returns; that observation
+    is neither recipient delivery nor permission for a second submission.
+    """
+    token = uuid.uuid4().hex
+    await command(
+        peer, command="send", destination=destination, content=content, token=token
+    )
+    await event(peer, "submitted", token=token, timeout=timeout)
+
+
 async def inbound(queue, peer, session, *, timeout=20):
     """Preserve the delivery deadline and capture bounded native failure evidence.
 
