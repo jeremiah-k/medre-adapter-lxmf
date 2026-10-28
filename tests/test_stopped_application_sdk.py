@@ -73,7 +73,10 @@ async def _native(role, config, storage):
             assert process.returncode == 0, errors.read().decode(errors="replace")
 
 
-async def test_shared_reticulum_chat_and_endpoint_restore(tmp_path, monkeypatch):
+@pytest.mark.parametrize("first_direction", ["inbound", "outbound"])
+async def test_shared_reticulum_chat_and_endpoint_restore(
+    tmp_path, monkeypatch, first_direction
+):
     """Restore the same LXMF contact while another chat peer and service stay live."""
     if sys.platform != "linux":
         pytest.skip("shared-service campaign is qualified on Linux")
@@ -200,6 +203,17 @@ async def test_shared_reticulum_chat_and_endpoint_restore(tmp_path, monkeypatch)
                 await _event(peer, "announce", address=address)
                 await _command(peer, command="announce")
                 await _event(peer, "announced")
+
+                async def outbound_roundtrip():
+                    await resumed.send_text(
+                        peer_ready["address"], "A fresh reply after restore"
+                    )
+                    assert (await _event(peer, "received"))[
+                        "content"
+                    ] == "A fresh reply after restore"
+
+                if first_direction == "outbound":
+                    await outbound_roundtrip()
                 await _command(
                     peer,
                     command="send",
@@ -209,11 +223,7 @@ async def test_shared_reticulum_chat_and_endpoint_restore(tmp_path, monkeypatch)
                 assert (await asyncio.wait_for(resumed_inbound.get(), 20))[
                     "content"
                 ] == "The same contact after restore"
-                await resumed.send_text(
-                    peer_ready["address"], "A fresh reply after restore"
-                )
-                assert (await _event(peer, "received"))[
-                    "content"
-                ] == "A fresh reply after restore"
+                if first_direction == "inbound":
+                    await outbound_roundtrip()
             finally:
                 await resumed.stop()

@@ -770,8 +770,10 @@ class TestSendRealFieldsPreservation:
 class TestSendRealDestinationRecall:
     """_send_real() uses RNS.Identity.recall to construct destinations."""
 
-    async def test_unrecallable_destination_raises_non_transient(self) -> None:
-        """If RNS.Identity.recall returns None, raise LxmfSendError(transient=False)."""
+    async def test_unrecallable_destination_requests_discovery_before_retryable_refusal(
+        self,
+    ) -> None:
+        """Missing native cache state is retryable and never enters the router."""
         session = _make_session(connection_type="fake")
         await session.start()
         session._config = _make_config(connection_type="reticulum")
@@ -789,19 +791,61 @@ class TestSendRealDestinationRecall:
             "medre.adapters.lxmf.session._require_lxmf",
             return_value=(mock_rns, mock_lxmf),
         ):
-            with pytest.raises(
-                LxmfSendError, match="Cannot recall identity"
-            ) as exc_info:
+            with (
+                patch("medre.adapters.lxmf.session._DESTINATION_DISCOVERY_TIMEOUT", 0),
+                pytest.raises(LxmfSendError, match="discovery is pending") as exc_info,
+            ):
                 await session._send_real(
                     destination_hash="ab" * 16,
                     content="hello",
                 )
 
         assert (
-            exc_info.value.transient is False
-        ), "Unrecallable destination should be a permanent (non-transient) error"
-        mock_rns.Identity.recall.assert_called_once_with(bytes.fromhex("ab" * 16))
+            exc_info.value.transient is True
+        ), "Missing discovery must remain retryable before handoff"
+        mock_rns.Transport.request_path.assert_called_once_with(
+            bytes.fromhex("ab" * 16)
+        )
+        session._router.handle_outbound.assert_not_called()
         await session.stop()
+
+    async def test_requested_discovery_resolves_before_handoff(self) -> None:
+        """A path request can populate the cache without submitting a payload."""
+        session = _make_session()
+        rns = MagicMock()
+        identity = object()
+        rns.Identity.recall.side_effect = [None, identity]
+        session._router = MagicMock()
+        result = await session._destination_identity(rns, bytes.fromhex("ab" * 16))
+        assert result is identity
+        rns.Transport.request_path.assert_called_once_with(bytes.fromhex("ab" * 16))
+        session._router.handle_outbound.assert_not_called()
+
+    async def test_cancelled_discovery_never_submits(self) -> None:
+        """Cancellation stays outside the uncertain native payload boundary."""
+        session = _make_session()
+        rns = MagicMock()
+        rns.Identity.recall.return_value = None
+        session._router = MagicMock()
+        task = asyncio.create_task(
+            session._destination_identity(rns, bytes.fromhex("ab" * 16))
+        )
+        await wait_until(lambda: rns.Transport.request_path.called)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        session._router.handle_outbound.assert_not_called()
+
+    async def test_discovery_error_is_retryable_without_raw_sdk_message(self) -> None:
+        """Native lookup errors cannot leak paths or create a send receipt."""
+        session = _make_session()
+        rns = MagicMock()
+        rns.Identity.recall.return_value = None
+        rns.Transport.request_path.side_effect = OSError("private native details")
+        with pytest.raises(LxmfSendError, match="discovery is pending") as failure:
+            await session._destination_identity(rns, bytes.fromhex("ab" * 16))
+        assert failure.value.transient
+        assert "private native" not in str(failure.value)
 
     async def test_destination_constructed_with_recalled_identity(self) -> None:
         """Destination must be constructed using the identity returned by recall."""
