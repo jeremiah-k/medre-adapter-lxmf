@@ -25,6 +25,29 @@ for a locked uv deployment project, private Git, local checkouts, index sources,
 and the same-environment requirement. Neither MEDRE nor the provider installs
 packages during runtime startup.
 
+## Using an existing Reticulum setup
+
+Reticulum is the shared network service; LXMF is the messaging protocol used by
+applications such as Sideband and Reticulum MeshChat. MEDRE acts as its own LXMF
+contact and exchanges ordinary text messages with those applications. A dedicated
+Reticulum instance is optional. See the [Reticulum sharing guide](https://reticulum.network/manual/using.html).
+
+Keep MEDRE's LXMF identity and storage profile separate from another chat app's
+profile. Select the existing Reticulum configuration with `reticulum_config_dir`,
+or leave it unset to use the SDK's normal configuration discovery. Leaving
+`identity_path` unset lets MEDRE persist a dedicated identity in `storage_path`.
+Applications can share the network service without sharing their private keys,
+ratchets, or local message databases. Original relay senders are represented by
+MEDRE's configured attribution text and metadata, rather than separate native
+LXMF signing identities. Reply/thread relations use the text fallback described
+below; app-specific attachments and reactions are separate capabilities.
+
+Stopped snapshots cover MEDRE's LXMF application identity, ratchets, router state,
+and handoff journal. They do not capture or stop a shared Reticulum service or
+other chat applications. Keep that network setup available, or restore it using
+its own procedure. The [native-worker specification](docs/spec/native-worker.md#stopped-state-capture-scope)
+describes the detailed capture boundary.
+
 ## Packaging and provenance
 
 This distribution registers the `medre.adapters` entry point and retains the
@@ -128,16 +151,16 @@ separate qualification tiers.
 
 The repository CI installs MEDRE core and this adapter. Its fake job omits
 native SDK dependencies; its SDK job installs this distribution's declared pins.
-CI tests against MEDRE `main` by default. Keep the repository Actions variable
-`MEDRE_CORE_REF` unset so pull-request checks retain that baseline. Qualify a
-candidate pair with a one-run dispatch and a full core commit SHA:
+The default core revision is defined by the [test workflow](.github/workflows/test.yml).
+Coordinated contract changes can select an immutable candidate core revision;
+qualify another pair with a one-run dispatch and a full core commit SHA:
 
 ```bash
 gh workflow run test.yml --ref ADAPTER_BRANCH -f core_ref=FULL_CORE_COMMIT_SHA
 ```
 
 Record both revisions with the result. The candidate run does not replace the
-adapter PR's checks against core `main`. Follow the
+adapter PR's checks against its workflow-selected core revision. Follow the
 [coordinated-change policy](https://github.com/jeremiah-k/medre/blob/main/docs/dev/coordinated-changes.md)
 for dependency order and merged compatibility pins.
 
