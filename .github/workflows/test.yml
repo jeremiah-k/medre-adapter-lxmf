@@ -66,8 +66,10 @@ jobs:
       - name: Run native SDK contracts
         if: matrix.mode == 'sdk'
         run: .core/.venv/bin/python -m pytest -v -m "lxmf_sdk and not local_integration and not soak and not live and not hardware and not docker"
-      - name: Run deterministic local integration
-        if: matrix.mode == 'sdk' && matrix.python == '3.13'
+      - name: Run local integration
+        if: >-
+          matrix.mode == 'sdk' &&
+          (matrix.python == '3.13' || matrix.python == '3.14')
         run: .core/.venv/bin/python -m pytest -v -m "local_integration and not soak"
       - name: Run opt-in local soak
         if: github.event_name == 'workflow_dispatch' && matrix.mode == 'sdk' && matrix.python == '3.13'

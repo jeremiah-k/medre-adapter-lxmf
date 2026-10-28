@@ -19,7 +19,10 @@ from medre_lxmf_tests.helpers.native_chat_events import (
     inbound as _inbound,
 )
 
-pytestmark = pytest.mark.lxmf_sdk
+# This campaign starts an independent Reticulum service and a live native peer.
+# Run it in the required local integration job, separately from SDK API
+# contracts. Both tags remain available for explicit native qualification.
+pytestmark = [pytest.mark.lxmf_sdk, pytest.mark.local_integration]
 
 
 @asynccontextmanager
