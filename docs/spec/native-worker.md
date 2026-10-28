@@ -225,28 +225,31 @@ backpressure callbacks; it MUST NOT poll PIDs or reap the child independently.
 
 ## Stopped-state capture scope
 
-Real LXMF MUST return ``unsupported`` for the generic complete-installation
-planner until a coherent pinned-SDK native export, restoration,
-and shared-owner exclusion procedure is qualified. ``storage/database`` MUST
-NOT be selected: RNS records such as ``known_destinations``,
-``destination_table``, ``transport_identity``, and ``packet_hashlist.raw``
-are binary/conditional native state, not a SQLite store. The LXMF router also
-writes native queue and propagation state under ``storagepath`` and may share
-a Reticulum singleton or external daemon. Direct delivery does not prove
-that shared state is quiescent; propagated delivery has additional queue
-ownership and remote-state limitations.
+Stopped capture MUST distinguish the MEDRE-owned LXMF application profile from
+the Reticulum network service. Applications MAY share an existing Reticulum
+service with separate LXMF identities and storage. Capturing an application
+MUST NOT require stopping that shared service or claim to back up its transport
+identity, interfaces, configuration, caches, or other applications' profiles.
+Restoring an application requires an available Reticulum setup supplied by the
+operator. A whole-node Reticulum backup is a separate procedure.
 
-The SDK-free declaration MUST report the real worker ``.medre-handoffs.sqlite``
-ledger and actual configured or generated identity as required *selected*
-bytes, whether the supplied identity path is in-root or not; the planner
-MUST still refuse incomplete native coverage. The ``.medre-worker.lock``
-flock inode is excluded from copied state. The worker's dual local flocks
-MUST be retained only on existing regular files, with partial acquisition
-cleanup, and MUST NOT be described as shared-Reticulum exclusion or as a
-post-restore ownership grant. Unconfigured default Reticulum paths MUST NOT
-be guessed by running RNS inside stopped maintenance. An independently
-qualified provider export is required before complete-installation support.
+The SDK-free configuration-only declaration MUST return unsupported preview
+coverage for real native state. The optional resolve_coverage callback MAY
+inspect the dedicated endpoint profile only while its queue and identity leases
+remain held through snapshot publication. The selection MUST include the
+configured/generated private identity, SQLite handoff journal including committed
+WAL, every existing supported native router state file, and private ratchet
+history. It MUST refuse symlinks, hard-linked files (which can alias external
+state), special files, unknown or temporary native files, and selections beyond
+the 4,096-file bound or the snapshot per-file size bound. Empty native
+directories MAY be recreated by SDK startup. Worker lock inodes MUST NOT be copied as authority.
 
+The endpoint contract covers native duplicate-suppression state, ticket/stamp
+metadata, and outbound propagation through an independent node. A local LXMF
+propagation-node message store is outside the adapter's endpoint role and MUST
+refuse automatic capture until its export and activation contract is implemented.
+Restored accepted or uncertain handoffs MUST retain their durable submission
+fences. Snapshot verification MUST NOT authorize sends or promote delivery.
 
 ## Endpoint ownership through process exit
 

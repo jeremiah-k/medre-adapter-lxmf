@@ -95,7 +95,9 @@ def test_configured_identity_is_required_not_assumed_external(tmp_path):
         ("explicit", "propagated"),
     ],
 )
-def test_shared_and_propagated_native_state_refused(tmp_path, config_dir, method):
+def test_configuration_only_preview_never_reads_reticulum_state(
+    tmp_path, config_dir, method
+):
     config = _settings(
         tmp_path,
         reticulum_config_dir=str(tmp_path / "reticulum") if config_dir else "",
@@ -103,16 +105,9 @@ def test_shared_and_propagated_native_state_refused(tmp_path, config_dir, method
     )
     coverage = declaration().coverage(config, adapter_id="node")
     assert coverage.state_class == "unsupported"
-    assert any("LXMF/RNS" in n for n in coverage.notes)
-    if config_dir:
-        assert any(
-            p.path.name == "config" and p.presence == "export_only"
-            for p in coverage.files
-        )
-    else:
-        assert any("default config" in n for n in coverage.notes)
-    if method == "propagated":
-        assert any("propagated" in n for n in coverage.notes)
+    assert any("capture-config" in note for note in coverage.notes)
+    assert all(p.path.name != "config" for p in coverage.files)
+    assert not (tmp_path / "reticulum").exists()
 
 
 def test_fake_mode_only_is_stateless(tmp_path):
