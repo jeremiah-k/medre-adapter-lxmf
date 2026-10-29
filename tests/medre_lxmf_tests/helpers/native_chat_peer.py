@@ -44,10 +44,15 @@ def main() -> None:
             title=message.title.decode("utf-8"),
         )
 
+    announce_seen = {}
+    announce_lock = threading.Lock()
+
     class Announces:
         aspect_filter = "lxmf.delivery"
 
         def received_announce(self, destination_hash, announced_identity, app_data):
+            with announce_lock:
+                announce_seen[destination_hash.hex()] = time.monotonic()
             emit(
                 event="announce",
                 address=destination_hash.hex(),
@@ -77,14 +82,27 @@ def main() -> None:
             target = last_message.get_destination().hash if last_message else None
             direct = router.direct_links.get(target)
             backchannel = router.backchannel_links.get(target)
+            with announce_lock:
+                announce_at = announce_seen.get(target.hex()) if target else None
+            announce_age = (
+                max(0.0, time.monotonic() - announce_at)
+                if announce_at is not None
+                else None
+            )
             emit(
                 event="status",
                 token=request["token"],
                 message_state=last_message.state if last_message else None,
                 delivery_attempts=last_message.delivery_attempts if last_message else 0,
                 direct_link_status=direct.status if direct else None,
+                direct_link_active=direct is not None
+                and direct.status == RNS.Link.ACTIVE,
                 backchannel_link_status=backchannel.status if backchannel else None,
+                backchannel_link_active=(
+                    backchannel is not None and backchannel.status == RNS.Link.ACTIVE
+                ),
                 path_known=RNS.Transport.has_path(target) if target else None,
+                matching_announce_age_seconds=announce_age,
                 attached=reticulum.is_connected_to_shared_instance,
                 accepted_age_seconds=(
                     time.monotonic() - accepted_at if accepted_at is not None else None
