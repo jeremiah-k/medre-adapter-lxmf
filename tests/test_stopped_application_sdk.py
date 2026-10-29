@@ -17,6 +17,7 @@ from medre_lxmf_tests.helpers.native_chat_events import (
     command as _command,
     event as _event,
     inbound as _inbound,
+    outbound_received as _outbound_received,
     submit as _submit,
 )
 
@@ -128,7 +129,7 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
                 await session.send_text(
                     peer_ready["address"], "[Alice/mesh] Reply through MEDRE ☃"
                 )
-                assert (await _event(peer, "received"))[
+                assert (await _outbound_received(peer, session))[
                     "content"
                 ] == "[Alice/mesh] Reply through MEDRE ☃"
                 await _command(peer, command="status", token="before-stop")
@@ -211,7 +212,7 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
                     await resumed.send_text(
                         peer_ready["address"], "A fresh reply after restore"
                     )
-                    assert (await _event(peer, "received"))[
+                    assert (await _outbound_received(peer, resumed))[
                         "content"
                     ] == "A fresh reply after restore"
 
