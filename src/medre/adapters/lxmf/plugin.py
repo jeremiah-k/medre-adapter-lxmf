@@ -5,6 +5,7 @@ from medre.adapter_spec import AdapterSpec, DestinationSpec, SymbolRef
 
 def adapter_spec() -> AdapterSpec:
     return AdapterSpec(
+        api_version=1,
         sample_config=SymbolRef("medre.adapters.lxmf.sample", "sample_config"),
         stopped_state_declaration=SymbolRef(
             "medre.adapters.lxmf.stopped_declaration", "declaration"
