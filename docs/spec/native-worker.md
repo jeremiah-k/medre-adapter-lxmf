@@ -222,7 +222,6 @@ uncertain handoffs, and retire descendants through the reserved process group.
 The observer MUST preserve the original stream protocol's data, EOF and write
 backpressure callbacks; it MUST NOT poll PIDs or reap the child independently.
 
-
 ## Stopped-state capture scope
 
 Stopped capture MUST distinguish the MEDRE-owned LXMF application profile from
@@ -265,7 +264,6 @@ Endpoint leases exclude competing owners of the same LXMF profile. They MUST
 NOT be described as exclusive ownership of a shared Reticulum network service.
 Independent applications may share that service with separate LXMF identities
 and storage profiles.
-
 
 ## Destination discovery before handoff
 
