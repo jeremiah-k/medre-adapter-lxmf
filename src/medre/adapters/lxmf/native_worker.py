@@ -66,6 +66,22 @@ def _retain_profile(config: LxmfConfig, *, message_plane: bool) -> WorkerProfile
     return profile
 
 
+def _open_protocol_stdin() -> BinaryIO:
+    """Read protocol frames from a dup of file descriptor 0, never from ``sys.stdin``.
+
+    The SDK forks worker subprocesses (LXMF stamp generation). Every fork
+    child inherits the ``sys.stdin`` buffer lock whenever a protocol reader
+    thread is parked inside ``read()``, and multiprocessing's
+    ``_close_stdin`` then deadlocks in the child before its job runs. A
+    dup'd raw descriptor consumes the same protocol stream while leaving
+    ``sys.stdin`` and its locks free for the fork children to close.
+    """
+    try:
+        return open(os.dup(0), "rb", buffering=0)
+    except OSError:
+        return sys.stdin.buffer
+
+
 async def _run(stream: BinaryIO) -> None:
     """Serve closed native commands while retaining SDK and queue ownership."""
     from medre.adapters.lxmf.session import (
@@ -74,7 +90,8 @@ async def _run(stream: BinaryIO) -> None:
         LxmfSessionDiagnostics,
     )
 
-    first = await asyncio.to_thread(read_sync, sys.stdin.buffer)
+    protocol_stdin = _open_protocol_stdin()
+    first = await asyncio.to_thread(read_sync, protocol_stdin)
     if not isinstance(first, Start):
         raise RuntimeError("Native worker requires a start frame")
     first.config.validate()
@@ -256,7 +273,7 @@ async def _run(stream: BinaryIO) -> None:
         overflow_task = asyncio.create_task(overflow.wait())
         while True:
             read_task = asyncio.create_task(
-                asyncio.to_thread(read_sync, sys.stdin.buffer)
+                asyncio.to_thread(read_sync, protocol_stdin)
             )
             done, _ = await asyncio.wait(
                 {read_task, writer, overflow_task}, return_when=asyncio.FIRST_COMPLETED
