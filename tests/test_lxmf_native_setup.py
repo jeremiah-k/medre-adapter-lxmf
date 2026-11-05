@@ -197,8 +197,7 @@ def test_native_form_records_the_identity_reference_without_echoing_it(
 def test_native_form_imports_no_transport_sdk(monkeypatch, tmp_path):
     for name in tuple(sys.modules):
         if any(
-            name == root or name.startswith(f"{root}.")
-            for root in _SDK_MODULE_NAMES
+            name == root or name.startswith(f"{root}.") for root in _SDK_MODULE_NAMES
         ):
             monkeypatch.delitem(sys.modules, name, raising=False)
     _run_native_form(
