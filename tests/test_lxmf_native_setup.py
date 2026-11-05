@@ -42,10 +42,12 @@ def test_native_setup_prompt_order_keeps_conditions_behind_controllers():
     )
 
 
-def test_provider_requires_declared_native_form_contract(monkeypatch):
+def test_older_core_without_native_form_still_discovers_provider(monkeypatch):
     monkeypatch.delattr(registration, "NativeSetupField", raising=False)
-    with pytest.raises(AttributeError, match="NativeSetupField"):
-        adapter_spec()
+    spec = adapter_spec()
+    assert spec.transport == "lxmf"
+    assert not spec.native_setup_fields
+    assert spec.config.load().__name__ == "LxmfConfig"
 
 
 def test_identity_reference_is_hidden_optional_input():
@@ -129,7 +131,9 @@ def test_native_form_writes_a_private_exclusive_output_file(monkeypatch, tmp_pat
     assert os.stat(output).st_mode & 0o777 == 0o600
 
 
-def test_native_form_never_overwrites_an_existing_output_file(monkeypatch, tmp_path):
+def test_native_form_never_overwrites_an_existing_output_file(
+    monkeypatch, tmp_path, capsys
+):
     from medre.cli import native_commands
 
     class Terminal(io.StringIO):
@@ -140,7 +144,8 @@ def test_native_form_never_overwrites_an_existing_output_file(monkeypatch, tmp_p
     output.write_text("keep: me\n", encoding="utf-8")
     monkeypatch.setenv("MEDRE_HOME", str(tmp_path / "state"))
     monkeypatch.setattr("sys.stdin", Terminal())
-    monkeypatch.setattr(native_commands, "_ask", lambda *args: "reticulum")
+    replies = iter(["reticulum", "", str(tmp_path / "lxmf-storage"), "", ""])
+    monkeypatch.setattr(native_commands, "_ask", lambda *args: next(replies))
     monkeypatch.setattr(native_commands.getpass, "getpass", lambda *args: "")
     monkeypatch.setattr("medre.cli.bridge_commands._confirm_save", lambda *args: True)
     with pytest.raises(SystemExit) as error:
@@ -150,6 +155,7 @@ def test_native_form_never_overwrites_an_existing_output_file(monkeypatch, tmp_p
             )
         )
     assert error.value.code == 2
+    assert "already exists" in capsys.readouterr().err.lower()
     assert output.read_text(encoding="utf-8") == "keep: me\n"
 
 
@@ -183,20 +189,29 @@ def test_native_form_records_the_identity_reference_without_echoing_it(
         ["reticulum", "", str(tmp_path / "lxmf-storage"), "", ""],
         secret=str(identity),
     )
-    assert str(identity) not in capsys.readouterr().err
+    captured = capsys.readouterr()
+    assert str(identity) not in captured.out
+    assert str(identity) not in captured.err
 
 
 def test_native_form_imports_no_transport_sdk(monkeypatch, tmp_path):
-    before = set(sys.modules)
+    for name in tuple(sys.modules):
+        if any(
+            name == root or name.startswith(f"{root}.")
+            for root in _SDK_MODULE_NAMES
+        ):
+            monkeypatch.delitem(sys.modules, name, raising=False)
     _run_native_form(
         monkeypatch,
         tmp_path,
         ["reticulum", "", str(tmp_path / "lxmf-storage"), "", ""],
         secret=str(tmp_path / "reticulum-identity"),
     )
-    added = set(sys.modules) - before
-    leaked = [name for name in _SDK_MODULE_NAMES if name in added]
-    assert leaked == []
+    assert not any(
+        name == root or name.startswith(f"{root}.")
+        for name in sys.modules
+        for root in _SDK_MODULE_NAMES
+    )
 
 
 def test_native_form_refuses_an_invalid_propagation_node(monkeypatch, tmp_path, capsys):
@@ -231,3 +246,16 @@ def test_native_form_refuses_an_invalid_propagation_node(monkeypatch, tmp_path, 
     assert error.value.code == 2
     assert "outbound_propagation_node" in capsys.readouterr().err
     assert not output.exists()
+
+
+def test_older_core_without_native_setup_fields_still_discovers_provider(monkeypatch):
+    from medre.adapters.lxmf import plugin
+
+    class LegacyAdapterSpec:
+        def __init__(self, **fields):
+            assert "native_setup_fields" not in fields
+            self.transport = fields["transport"]
+
+    monkeypatch.setattr(plugin, "AdapterSpec", LegacyAdapterSpec)
+    spec = plugin.adapter_spec()
+    assert spec.transport == "lxmf"
