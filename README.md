@@ -42,6 +42,23 @@ MEDRE's configured attribution text and metadata, rather than separate native
 LXMF signing identities. Reply/thread relations use the text fallback described
 below; app-specific attachments and reactions are separate capabilities.
 
+An offline setup form collects these connection settings without starting a
+runtime, importing the transport SDKs, or contacting the network:
+
+```bash
+medre config native --transport lxmf --adapter-id bot --output connection.yaml
+```
+
+The form writes a new private YAML file and collects configuration values only.
+It references an existing Reticulum identity file by path and never provisions,
+generates, or modifies identity material. Preparing that identity, configuring
+Reticulum interfaces, and discovering peer destination hashes for route
+contexts remain native, manual steps: use the
+[Reticulum sharing guide](https://reticulum.network/manual/using.html) and the
+announces of the peers to reach. Leaving the identity path blank keeps the
+documented behavior above: the worker persists a dedicated identity in the
+storage path on first start.
+
 Stopped snapshots cover MEDRE's LXMF application identity, ratchets, router state,
 and handoff journal. They do not capture or stop a shared Reticulum service or
 other chat applications. Keep that network setup available, or restore it using
