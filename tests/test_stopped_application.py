@@ -64,6 +64,9 @@ def test_application_selection_preserves_ratchets_and_excludes_reticulum(tmp_pat
         "unrecognized",
         "lxmf/messagestore",
         "lxmf/local_deliveries.tmp",
+        "lxmf/state.db-wal",
+        "lxmf/state.db-shm",
+        "lxmf/local_deliveries.imported",
         "lxmf/ratchets/key.tmp",
     ],
 )
@@ -148,3 +151,62 @@ def test_two_profiles_can_share_a_reticulum_setup(tmp_path):
         assert _resolved(second).state_class == "file_backed"
     finally:
         held.close()
+
+
+@pytest.mark.parametrize(
+    "imported",
+    [
+        None,
+        "local_deliveries",
+        "locally_processed",
+        "outbound_stamp_costs",
+        "available_tickets",
+    ],
+)
+def test_router_sqlite_snapshot_preserves_committed_wal_and_imported_state(
+    tmp_path, imported
+):
+    """Capture committed SDK state and legacy imports without copying WAL sidecars."""
+    from medre.maintenance.stopped_snapshot import (
+        SnapshotEntry,
+        create_stopped_snapshot,
+        restore_stopped_snapshot,
+    )
+
+    root = tmp_path / "source"
+    config = _profile(root)
+    core = root / "core.sqlite"
+    with closing(sqlite3.connect(core)) as db, db:
+        db.execute("CREATE TABLE retained(value TEXT)")
+    native = root / "endpoint/lxmf/state.db"
+    with closing(sqlite3.connect(native)) as db:
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("PRAGMA wal_autocheckpoint=0")
+        db.execute("CREATE TABLE native_state(value TEXT)")
+        db.execute("INSERT INTO native_state VALUES('retained-in-wal')")
+        db.commit()
+        assert native.with_name("state.db-wal").stat().st_size > 0
+        if imported:
+            (native.parent / (imported + ".imported")).write_bytes(b"legacy-import")
+        coverage = _resolved(config)
+        entries = [SnapshotEntry("core.sqlite", "core_sqlite", "sqlite")]
+        entries.extend(
+            SnapshotEntry(str(item.path.relative_to(root)), item.role, item.format)
+            for item in coverage.files
+        )
+        snapshot = tmp_path / "snapshot"
+        create_stopped_snapshot(root, snapshot, entries, runtime_stopped=True)
+        restored = tmp_path / "restored"
+        restore_stopped_snapshot(snapshot, restored, runtime_stopped=True)
+
+    restored_db = restored / "endpoint/lxmf/state.db"
+    assert not restored_db.with_name("state.db-wal").exists()
+    assert not restored_db.with_name("state.db-shm").exists()
+    with closing(sqlite3.connect(restored_db)) as db:
+        assert db.execute("SELECT value FROM native_state").fetchall() == [
+            ("retained-in-wal",)
+        ]
+    if imported:
+        assert (
+            restored_db.parent / (imported + ".imported")
+        ).read_bytes() == b"legacy-import"

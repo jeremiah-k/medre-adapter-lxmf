@@ -173,6 +173,10 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
                 for item in plan.entries
             )
             assert any(item.path.endswith(".ratchets") for item in plan.entries)
+            assert any(
+                item.path.endswith("lxmf/state.db") and item.format == "sqlite"
+                for item in plan.entries
+            )
             verify_stopped_snapshot(snapshot)
             restored = tmp_path / "restored"
             restore_stopped_snapshot(snapshot, restored, runtime_stopped=True)
