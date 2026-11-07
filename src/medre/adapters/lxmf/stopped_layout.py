@@ -27,6 +27,17 @@ _ROUTER_FILES = frozenset(
         "peers",
     }
 )
+_ROUTER_DB = "state.db"
+_ROUTER_DB_SIDECARS = frozenset({"state.db-wal", "state.db-shm"})
+_IMPORTED_FILES = frozenset(
+    name + ".imported"
+    for name in (
+        "local_deliveries",
+        "locally_processed",
+        "outbound_stamp_costs",
+        "available_tickets",
+    )
+)
 _RATCHET_NAME = re.compile(r"[0-9a-f]{32}\.ratchets")
 _JOURNAL = ".medre-handoffs.sqlite"
 _LOCK = ".medre-worker.lock"
@@ -138,16 +149,30 @@ def _application_files(storage: Path, identity: Path) -> tuple[DeclaredFile, ...
             _regular(path)
     router = storage / "lxmf"
     _directory(router)
-    entries = _entries(router, _ROUTER_FILES | {"ratchets"})
+    entries = _entries(
+        router,
+        _ROUTER_FILES
+        | {_ROUTER_DB, "ratchets"}
+        | _ROUTER_DB_SIDECARS
+        | _IMPORTED_FILES,
+    )
+    if _ROUTER_DB not in entries and entries.keys() & (
+        _ROUTER_DB_SIDECARS | _IMPORTED_FILES
+    ):
+        raise StoppedPlanError(
+            "LXMF database companions require the native state database"
+        )
     for name, path in sorted(entries.items()):
         if name == "ratchets":
             continue
         _regular(path)
+        if name in _ROUTER_DB_SIDECARS:
+            continue  # SQLite backup includes committed WAL pages, not raw sidecars.
         files.append(
             DeclaredFile(
                 path,
                 "native_identity",
-                "opaque",
+                "sqlite" if name == _ROUTER_DB else "opaque",
                 purpose="native router application state",
             )
         )

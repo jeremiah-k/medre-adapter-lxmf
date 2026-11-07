@@ -273,3 +273,9 @@ bounded within the worker exchange timeout. An unresolved path MUST remain a
 retryable pre-handoff refusal, not permanent recipient failure or SDK acceptance.
 Cancellation MUST propagate without a native payload submission. Discovering a
 path MUST NOT retry a message whose native handoff outcome is uncertain.
+
+LXMF 1.3 endpoint state includes `lxmf/state.db`. Its committed WAL MUST be
+captured through the SQLite backup protocol, without copying transient WAL/SHM
+sidecars as independent state. Recognized legacy `.imported` cache files MUST
+be retained as opaque state alongside that database; orphan companions and
+unrecognized files MUST continue to refuse automatic capture.
