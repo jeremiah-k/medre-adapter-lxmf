@@ -144,7 +144,7 @@ def test_router_and_reticulum_lifecycle_surfaces_exist() -> None:
     transport = rns.Transport
     assert callable(getattr(transport, "deregister_destination", None))
     assert callable(getattr(transport, "deregister_announce_handler", None))
-    assert isinstance(getattr(transport, "announce_handlers", None), list)
+    assert isinstance(getattr(transport, "announce_handlers", None), dict)
 
     handlers = import_module("LXMF.Handlers")
     router_owner = object()
@@ -248,7 +248,8 @@ async def test_rendered_title_and_envelope_count_toward_opportunistic_fallback(
         ({"transport": True, "impl_name": "RNS", "version": None}, False),
         ({"transport": True, "impl_name": "other", "version": "9.0.0"}, False),
         ({"transport": True, "impl_name": "RNS", "version": "1.5.1"}, False),
-        ({"transport": True, "impl_name": "RNS", "version": "1.5.2"}, True),
+        ({"transport": True, "impl_name": "RNS", "version": "1.5.6"}, False),
+        ({"transport": True, "impl_name": "RNS", "version": "1.5.7"}, True),
     ],
 )
 def test_rns_discovery_requires_recognized_version_metadata(
@@ -285,7 +286,7 @@ def test_rns_discovery_requires_advertised_transport_even_with_override(
         "should_autoconnect_unverified_implementations",
         lambda: unverified,
     )
-    candidate = {"impl_name": "RNS", "version": "1.5.2", **transport_metadata}
+    candidate = {"impl_name": "RNS", "version": "1.5.7", **transport_metadata}
     assert discovery.autoconnect_qualified(candidate) is (
         transport_metadata.get("transport") is True
     )
@@ -393,3 +394,37 @@ def test_rnode_reconnect_in_flight_can_attempt_open_after_ble_detach(
     interface.reconnect_port()
     interface.open_port.assert_called_once()
     assert interface.reconnecting is False
+
+
+def test_teardown_removes_owned_handlers_from_real_transport_buckets(monkeypatch):
+    """Remove both owned aspects while retaining another router in a shared bucket."""
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from medre.adapters.lxmf.session import LxmfSession
+    from medre.config.adapters.lxmf import LxmfConfig
+
+    _, rns = _load_sdks()
+    handlers = import_module("LXMF.Handlers")
+    monkeypatch.setattr(rns.Transport, "announce_handlers", {})
+    monkeypatch.setattr(rns.Transport, "should_collect", False)
+    owner = SimpleNamespace(exit_handler=Mock())
+    other = object()
+    owned = [
+        handlers.LXMFDeliveryAnnounceHandler(owner),
+        handlers.LXMFPropagationAnnounceHandler(owner),
+    ]
+    unrelated = handlers.LXMFDeliveryAnnounceHandler(other)
+    for handler in [*owned, unrelated]:
+        rns.Transport.register_announce_handler(handler)
+    assert len(rns.Transport.announce_handlers) == 2
+    session = LxmfSession(config=LxmfConfig(adapter_id="test"), adapter_id="test")
+    session._router = owner
+    session._rns_transport = rns.Transport
+
+    session._teardown_sdk()
+
+    owner.exit_handler.assert_called_once_with()
+    assert [
+        h for bucket in rns.Transport.announce_handlers.values() for h in bucket
+    ] == [unrelated]
