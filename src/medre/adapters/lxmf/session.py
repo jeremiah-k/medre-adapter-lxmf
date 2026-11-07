@@ -1184,6 +1184,14 @@ class LxmfSession:
                     transport, "deregister_announce_handler", None
                 )
                 announce_handlers = getattr(transport, "announce_handlers", None)
+                if isinstance(announce_handlers, dict):
+                    # RNS 1.6 groups handlers by aspect hash. Snapshot every
+                    # bucket before deregistration mutates or removes it.
+                    announce_handlers = [
+                        handler
+                        for bucket in tuple(announce_handlers.values())
+                        for handler in tuple(bucket)
+                    ]
                 if callable(deregister_announce_handler) and isinstance(
                     announce_handlers, list
                 ):

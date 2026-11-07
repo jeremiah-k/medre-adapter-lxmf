@@ -30,3 +30,10 @@ Once handle_outbound has been entered, any raised exception MUST be treated as
 an unknown handoff outcome. The adapter MUST NOT automatically resubmit that
 attempt or infer a negative recipient confirmation. Operator reconciliation
 is required before retrying an uncertain dispatch.
+
+Router teardown MUST remove only announce handlers owned by that router. It
+MUST snapshot both flat and aspect-bucketed SDK registries before
+deregistration, preserving unrelated routers even when they share a bucket.
+The pinned RNS 1.6 discovery policy accepts verified RNS transport advertisements
+from version 1.5.7 onward; the unverified-implementation override MUST NOT
+bypass the requirement to advertise transport support.
