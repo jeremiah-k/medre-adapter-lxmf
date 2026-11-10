@@ -40,6 +40,8 @@ the inline text in the content field.  The result carries
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from typing import Any, Mapping
 
 from medre.adapters.lxmf.fields import LxmfFieldsHelper
@@ -314,8 +316,8 @@ class LxmfRenderer:
 
         Projects source identity via the adapter attribution dispatch,
         then builds the generic attribution with origin_label precedence:
-        ``ctx.source_origin_label`` (route/context) > source_attribution
-        registry > ``None``.
+        ``ctx.source_origin_label`` (route/context) > attribution snapshot >
+        source_attribution registry > ``None``.
 
         Parameters
         ----------
@@ -331,16 +333,19 @@ class LxmfRenderer:
             Attribution snapshot with origin_label populated from the
             highest-precedence source.
         """
-        # Resolve source_info once for both origin_label and platform_hint.
         source_info = self._source_attribution.get(event.source_adapter)
-
-        # Resolve origin_label precedence: ctx > registry > None.
-        # Use 'is not None' to preserve explicit empty string labels.
-        source_origin_label: str | None = None
+        source_origin_label = (
+            getattr(source_info, "origin_label", None) if source_info else None
+        )
+        if ctx is not None and ctx.source_attribution is not None:
+            source = ctx.source_attribution
+            if source.source_origin_label is not None:
+                source_origin_label = source.source_origin_label
+            if ctx.source_origin_label is not None:
+                source_origin_label = ctx.source_origin_label
+            return replace(source, source_origin_label=source_origin_label)
         if ctx is not None and ctx.source_origin_label is not None:
             source_origin_label = ctx.source_origin_label
-        elif source_info is not None:
-            source_origin_label = getattr(source_info, "origin_label", None)
 
         # Project source identity from native metadata via dispatch.
         native_data: dict[str, object] = {}
