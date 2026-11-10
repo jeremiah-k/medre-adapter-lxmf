@@ -26,3 +26,13 @@ SDK and codec checks do not establish RF qualification.
 
 The renderer MUST select a styled message's authoritative body over a stale text
 alias. Unstyled legacy messages retain their text-first behavior.
+
+Optional `bridge_context.source.native_facts` is a single bounded public
+source-namespace projection; LXMF uses the same normalized structure as Matrix
+and XMPP. An LXMF recipient must never promote these hints into native sender
+identity, mutation/reaction authority, or forwarding permission.
+
+When rendering supplied source attribution, origin-label precedence MUST be the
+explicit route/context label, then the attribution snapshot label, then the
+configured source label. Only `None` falls through; an explicit empty label
+MUST be preserved at each level.
