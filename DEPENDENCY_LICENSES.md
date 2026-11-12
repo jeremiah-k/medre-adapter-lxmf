@@ -3,8 +3,8 @@
 The `LICENSE` in this repository covers original MEDRE-authored adapter source
 (MIT), **not** the third-party LXMF/Reticulum implementation.
 
-- `lxmf==1.3.0`: Reticulum License — [release metadata](https://pypi.org/project/lxmf/1.3.0/).
-- `rns==1.6.0`: Reticulum License — [release metadata](https://pypi.org/project/rns/1.6.0/).
+- `lxmf==1.3.0`: Reticulum License — [release metadata](https://pypi.org/project/lxmf/).
+- `rns==1.6.0`: Reticulum License — [release metadata](https://pypi.org/project/rns/).
 - [Official license](https://reticulum.network/manual/license.html): includes
   restrictions concerning systems with functions intended to harm people and
   creation of AI/ML training datasets. This is not an OSI-approved license.
