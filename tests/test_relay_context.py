@@ -203,13 +203,13 @@ async def test_invalid_remote_context_does_not_discard_message(invalid):
     "payload,expected",
     [
         ({"body": "current", "text": "stale", "formatting": {"spans": []}}, "current"),
-        ({"body": "legacy body", "text": "legacy text"}, "legacy text"),
+        ({"body": "plain body", "text": "plain text"}, "plain text"),
     ],
 )
-async def test_styled_body_is_authoritative_while_legacy_alias_is_preserved(
+async def test_styled_body_is_authoritative_while_text_field_is_selected(
     payload, expected
 ):
-    """Prefer styled canonical body text while retaining legacy unstyled alias behavior."""
+    """Prefer styled canonical body text; unstyled messages select ``text`` first."""
     result = await renderer().render(
         source_event(payload),
         RenderingContext(
@@ -224,8 +224,8 @@ async def test_styled_body_is_authoritative_while_legacy_alias_is_preserved(
     "payload",
     [
         {"body": "valid body", "text": 42},
-        {"body": 42, "text": "legacy"},
-        {"body": None, "text": "legacy", "formatting": {"version": 1, "spans": []}},
+        {"body": 42, "text": "unstyled"},
+        {"body": None, "text": "unstyled", "formatting": {"version": 1, "spans": []}},
     ],
 )
 async def test_malformed_canonical_text_never_becomes_native_content(payload):
