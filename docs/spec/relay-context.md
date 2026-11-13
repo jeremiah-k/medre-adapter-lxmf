@@ -36,3 +36,21 @@ When rendering supplied source attribution, origin-label precedence MUST be the
 explicit route/context label, then the attribution snapshot label, then the
 configured source label. Only `None` falls through; an explicit empty label
 MUST be preserved at each level.
+
+## Visible prefix surface
+
+The visible attribution template is the `relay_prefix` configuration key,
+rendered through core's shared relay-prefix formatter. An empty string MUST
+disable the prefix; the MEDRE metadata envelope remains the authoritative
+provenance source either way. Prefix presentation MUST NOT rewrite canonical
+sender metadata.
+
+LXMF is a radio transport, and constrained client displays are the affordance
+that motivates truncation. The label variables `sender`, `sender_short`, and
+`origin_label` accept the shared `{nameN}` truncation suffix in configured
+templates, rendering the first N Unicode code points of the variable's value.
+The suffix counts code points, never bytes, and N MUST be at least 1
+(`{sender0}` is not a truncation variable). A numeric-suffixed name whose stem
+is not declared truncatable for this transport passes through unchanged — the
+fixed-width `sender_id` source hash is deliberately left undeclared. The
+shared relay-prefix formatter specification defines the full contract.

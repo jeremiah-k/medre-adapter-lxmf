@@ -20,6 +20,13 @@ time the config for *ctx.target_adapter* is resolved from this mapping
 as the prefix template.  This allows multi-LXMF setups where each
 adapter has a different relay prefix.
 
+Radio displays are constrained, so the label variables ``sender``,
+``sender_short``, and ``origin_label`` additionally accept the shared
+``{nameN}`` truncation suffix — ``{sender3}`` renders the first three
+Unicode code points of the sender label (N >= 1).  A numeric-suffixed
+undeclared name passes through unchanged, per the shared relay-prefix
+formatter contract.
+
 **Strict RenderingContext protocol**
 
 Both ``can_render`` and ``render`` accept a frozen
@@ -58,6 +65,14 @@ from medre.core.rendering.relations import degrade_relations_inline
 from medre.core.rendering.renderer import RenderingContext, RenderingResult
 from medre.core.rendering.text_helpers import truncate_text as _truncate_text
 
+# Label variables that accept the ``{nameN}`` first-N-code-points
+# truncation suffix in relay-prefix templates.  Radio displays are the
+# constrained-display affordance that motivates truncation on this
+# transport; identifier-like variables (``sender_id`` — the fixed-width
+# LXMF source hash — ``platform``, ``channel``, ``route_id``) are
+# deliberately excluded.
+_TRUNCATABLE_VARIABLES: tuple[str, ...] = ("sender", "sender_short", "origin_label")
+
 
 class LxmfRenderer:
     """Renderer for LXMF transport targets.
@@ -71,6 +86,12 @@ class LxmfRenderer:
     mapping.  The ``relay_prefix`` from the resolved config is used
     as the prefix template.  This allows multi-LXMF setups where each
     adapter has a different relay prefix.
+
+    The label variables ``sender``, ``sender_short``, and
+    ``origin_label`` accept the shared ``{nameN}`` truncation suffix in
+    custom templates: ``{sender3}`` renders the first three Unicode
+    code points of the sender label (N >= 1).  A numeric suffix on an
+    undeclared name is treated as unknown and passes through unchanged.
 
     When ``metadata_embedding`` is enabled (default), the renderer
     embeds a MEDRE metadata envelope in the ``fields`` dict containing the
@@ -209,7 +230,9 @@ class LxmfRenderer:
         # envelope in fields carries provenance claims, not identity authority.
         prefix_meta: dict[str, object] = {}
         if prefix_template and attr is not None:
-            prefix_result = format_relay_prefix(prefix_template, attr)
+            prefix_result = format_relay_prefix(
+                prefix_template, attr, truncatable=_TRUNCATABLE_VARIABLES
+            )
             # On formatting_exception the rendered_prefix is the raw
             # template — do NOT prepend it to user-facing text.
             is_exception = (
