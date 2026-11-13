@@ -389,71 +389,71 @@ class TestLxmfConfigDefaultChannelType:
         assert config.validate().default_channel == 1
 
 
-# --- lxmf_relay_prefix validation ---
+# --- relay_prefix validation ---
 
 
-def test_lxmf_relay_prefix_default_is_empty_string() -> None:
+def test_relay_prefix_default_is_empty_string() -> None:
     config = LxmfConfig(adapter_id="lxmf-1")
-    assert config.lxmf_relay_prefix == ""
+    assert config.relay_prefix == ""
 
 
-def test_lxmf_relay_prefix_empty_string_is_valid() -> None:
-    config = LxmfConfig(adapter_id="lxmf-1", lxmf_relay_prefix="")
-    assert config.validate().lxmf_relay_prefix == ""
+def test_relay_prefix_empty_string_is_valid() -> None:
+    config = LxmfConfig(adapter_id="lxmf-1", relay_prefix="")
+    assert config.validate().relay_prefix == ""
 
 
-def test_lxmf_relay_prefix_valid_string_accepted() -> None:
+def test_relay_prefix_valid_string_accepted() -> None:
     config = LxmfConfig(
         adapter_id="lxmf-1",
-        lxmf_relay_prefix="[{sender}] ",
+        relay_prefix="[{sender}] ",
     )
-    assert config.validate().lxmf_relay_prefix == "[{sender}] "
+    assert config.validate().relay_prefix == "[{sender}] "
 
 
-def test_lxmf_relay_prefix_bool_true_rejected() -> None:
+def test_relay_prefix_bool_true_rejected() -> None:
     config = LxmfConfig(
         adapter_id="lxmf-1",
-        lxmf_relay_prefix=True,  # type: ignore[arg-type]
+        relay_prefix=True,  # type: ignore[arg-type]
     )
     with pytest.raises(
         LxmfConfigError,
-        match="lxmf_relay_prefix must be a string, not a boolean",
+        match="relay_prefix must be a string, not a boolean",
     ):
         config.validate()
 
 
-def test_lxmf_relay_prefix_bool_false_rejected() -> None:
+def test_relay_prefix_bool_false_rejected() -> None:
     config = LxmfConfig(
         adapter_id="lxmf-1",
-        lxmf_relay_prefix=False,  # type: ignore[arg-type]
+        relay_prefix=False,  # type: ignore[arg-type]
     )
     with pytest.raises(
         LxmfConfigError,
-        match="lxmf_relay_prefix must be a string, not a boolean",
+        match="relay_prefix must be a string, not a boolean",
     ):
         config.validate()
 
 
-def test_lxmf_relay_prefix_int_rejected() -> None:
+def test_relay_prefix_int_rejected() -> None:
     config = LxmfConfig(
         adapter_id="lxmf-1",
-        lxmf_relay_prefix=42,  # type: ignore[arg-type]
+        relay_prefix=42,  # type: ignore[arg-type]
     )
     with pytest.raises(
         LxmfConfigError,
-        match="lxmf_relay_prefix must be a string, got int",
+        match="relay_prefix must be a string, got int",
     ):
         config.validate()
 
 
-def test_lxmf_relay_prefix_none_rejected() -> None:
+def test_relay_prefix_none_rejected() -> None:
     config = LxmfConfig(
         adapter_id="lxmf-1",
-        lxmf_relay_prefix=None,  # type: ignore[arg-type]
+        relay_prefix=None,  # type: ignore[arg-type]
     )
     with pytest.raises(
         LxmfConfigError,
-        match="lxmf_relay_prefix must be a string, got NoneType",
+        match="relay_prefix must be a string, got NoneType",
     ):
         config.validate()
 

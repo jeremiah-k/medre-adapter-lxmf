@@ -16,7 +16,7 @@ matches on that platform string directly.
 The renderer is initialised with an optional mapping of adapter IDs to
 :class:`~medre.config.adapters.lxmf.LxmfConfig` instances.  At render
 time the config for *ctx.target_adapter* is resolved from this mapping
-— the ``lxmf_relay_prefix`` from the target adapter's config is used
+— the ``relay_prefix`` from the target adapter's config is used
 as the prefix template.  This allows multi-LXMF setups where each
 adapter has a different relay prefix.
 
@@ -68,7 +68,7 @@ class LxmfRenderer:
     **Target-aware rendering.** The renderer is initialised with an
     optional mapping of adapter IDs to LXMF config instances.  At render
     time the config for *ctx.target_adapter* is resolved from this
-    mapping.  The ``lxmf_relay_prefix`` from the resolved config is used
+    mapping.  The ``relay_prefix`` from the resolved config is used
     as the prefix template.  This allows multi-LXMF setups where each
     adapter has a different relay prefix.
 
@@ -83,7 +83,7 @@ class LxmfRenderer:
     configs:
         Optional mapping of adapter IDs to config objects.  When
         provided, the prefix template is resolved from the target
-        adapter's ``lxmf_relay_prefix`` at render time.
+        adapter's ``relay_prefix`` at render time.
     source_attribution:
         Optional mapping of adapter IDs to source attribution config
         objects.  Used to resolve ``origin_label`` for the source
@@ -288,7 +288,7 @@ class LxmfRenderer:
         """Resolve the relay prefix template for the target adapter.
 
         Looks up the target adapter in the configs mapping and returns
-        its ``lxmf_relay_prefix``. Missing target configuration resolves to
+        its ``relay_prefix``. Missing target configuration resolves to
         an empty prefix.
 
         Parameters
@@ -304,7 +304,7 @@ class LxmfRenderer:
         if self._configs:
             adapter_config = self._configs.get(ctx.target_adapter)
             if adapter_config is not None:
-                return getattr(adapter_config, "lxmf_relay_prefix", "")
+                return getattr(adapter_config, "relay_prefix", "")
         return ""
 
     def _extract_attribution_with_source(

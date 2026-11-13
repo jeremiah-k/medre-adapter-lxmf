@@ -113,7 +113,7 @@ class LxmfConfig:
         path discovery.  ``0`` disables periodic announce.  Default
         ``600`` (10 minutes).  Only used in non-fake connection modes —
         fake mode never creates network-visible announces.
-    lxmf_relay_prefix:
+    relay_prefix:
         Optional template string for human-readable relay attribution
         prefix prepended to outbound LXMF message body text.  Uses
         ``{placeholder}`` syntax resolved by the shared
@@ -138,7 +138,7 @@ class LxmfConfig:
     reticulum_config_dir: str | None = None
     storage_path: str | None = None
     announce_interval_seconds: float = 600.0
-    lxmf_relay_prefix: str = ""
+    relay_prefix: str = ""
 
     def validate(self) -> Self:
         """Validate the configuration and return *self* for chaining.
@@ -297,13 +297,13 @@ class LxmfConfig:
                 f"got {self.announce_interval_seconds}"
             )
 
-        # --- lxmf_relay_prefix ---
-        if isinstance(self.lxmf_relay_prefix, bool):
-            raise LxmfConfigError("lxmf_relay_prefix must be a string, not a boolean")
-        if not isinstance(self.lxmf_relay_prefix, str):
+        # --- relay_prefix ---
+        if isinstance(self.relay_prefix, bool):
+            raise LxmfConfigError("relay_prefix must be a string, not a boolean")
+        if not isinstance(self.relay_prefix, str):
             raise LxmfConfigError(
-                f"lxmf_relay_prefix must be a string, "
-                f"got {type(self.lxmf_relay_prefix).__name__}"
+                f"relay_prefix must be a string, "
+                f"got {type(self.relay_prefix).__name__}"
             )
 
         # --- origin_label ---
