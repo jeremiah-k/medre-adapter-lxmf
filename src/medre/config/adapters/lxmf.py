@@ -25,6 +25,11 @@ SDK is unavailable or production connectivity is not yet implemented.
 
 from __future__ import annotations
 
+from medre.core.rendering.attribution import (
+    validate_relay_prefix,
+    TRUNCATABLE_RELAY_LABELS,
+)
+
 import math
 from dataclasses import dataclass
 from typing import Literal, Self
@@ -320,4 +325,10 @@ class LxmfConfig:
         # LxmfFieldsHelper.embed_envelope explicitly documents that
         # no private keys or secrets are embedded in envelopes.
 
+        try:
+            validate_relay_prefix(
+                self.relay_prefix, truncatable=TRUNCATABLE_RELAY_LABELS
+            )
+        except ValueError as exc:
+            raise LxmfConfigError(str(exc)) from exc
         return self
