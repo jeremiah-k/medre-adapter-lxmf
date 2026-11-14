@@ -20,7 +20,7 @@ from medre_lxmf_tests.helpers.lxmf_renderer import lxmf_renderer_with_prefix
 
 
 def _make_event(
-    display_name: str | None = "Tad Chilly",
+    display_name: str | None = "Bob Smith",
     short_name: str | None = None,
     text: str = "Testing from Sideband",
 ) -> CanonicalEvent:
@@ -58,7 +58,7 @@ def _make_event(
 async def _render(
     relay_prefix: str,
     *,
-    display_name: str | None = "Tad Chilly",
+    display_name: str | None = "Bob Smith",
     short_name: str | None = None,
     text: str = "Testing from Sideband",
     ctx: RenderingContext | None = None,
@@ -77,8 +77,8 @@ async def _render(
 
 async def test_custom_template_truncates_sender_by_code_points() -> None:
     result = await _render("{sender3}[LXMF]: ")
-    assert result.payload["content"] == "Tad[LXMF]: Testing from Sideband"
-    assert result.metadata["relay_prefix_rendered"] == "Tad[LXMF]: "
+    assert result.payload["content"] == "Bob[LXMF]: Testing from Sideband"
+    assert result.metadata["relay_prefix_rendered"] == "Bob[LXMF]: "
 
 
 async def test_truncation_counts_code_points_not_bytes() -> None:
@@ -106,13 +106,13 @@ async def test_origin_label_truncation_suffix() -> None:
 
 
 async def test_sender_short_truncation_suffix() -> None:
-    result = await _render("{sender_short4}: ", short_name="tadchilly")
-    assert result.payload["content"] == "tadc: Testing from Sideband"
+    result = await _render("{sender_short4}: ", short_name="bobsmith")
+    assert result.payload["content"] == "bobs: Testing from Sideband"
 
 
 async def test_sender_short_falls_back_to_compact_display_name() -> None:
     result = await _render("{sender_short4}: ")
-    assert result.payload["content"] == "TadC: Testing from Sideband"
+    assert result.payload["content"] == "BobS: Testing from Sideband"
 
 
 # ---------------------------------------------------------------------------
@@ -141,8 +141,7 @@ async def test_plain_variables_are_unaffected_by_declaration() -> None:
     result = await _render("[{sender}]({sender_id}) ")
     source_hash = "ab" * 16
     assert (
-        result.payload["content"]
-        == f"[Tad Chilly]({source_hash}) Testing from Sideband"
+        result.payload["content"] == f"[Bob Smith]({source_hash}) Testing from Sideband"
     )
 
 
