@@ -203,7 +203,7 @@ class FakeLxmfAdapter(AdapterContract):
             if adapter_id is None:
                 adapter_id = "fake_lxmf"
             config = LxmfConfig(adapter_id=adapter_id)
-        self._config = config
+        self._config = config.validate()
         self.adapter_id = config.adapter_id
         self.ctx: AdapterContext | None = None
         self.delivered_payloads: list[RenderingResult] = []
