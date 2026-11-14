@@ -24,8 +24,7 @@ Radio displays are constrained, so the label variables ``sender``,
 ``sender_short``, and ``origin_label`` additionally accept the shared
 ``{nameN}`` truncation suffix — ``{sender3}`` renders the first three
 Unicode code points of the sender label (N >= 1).  A numeric-suffixed
-undeclared name passes through unchanged, per the shared relay-prefix
-formatter contract.
+undeclared name is rejected during configuration validation and rendering.
 
 **Strict RenderingContext protocol**
 
@@ -92,7 +91,7 @@ class LxmfRenderer:
     ``origin_label`` accept the shared ``{nameN}`` truncation suffix in
     custom templates: ``{sender3}`` renders the first three Unicode
     code points of the sender label (N >= 1).  A numeric suffix on an
-    undeclared name is treated as unknown and passes through unchanged.
+    undeclared name is rejected during configuration validation and rendering.
 
     When ``metadata_embedding`` is enabled (default), the renderer
     embeds a MEDRE metadata envelope in the ``fields`` dict containing the
