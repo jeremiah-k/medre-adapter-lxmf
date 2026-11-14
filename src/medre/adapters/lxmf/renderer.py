@@ -47,8 +47,6 @@ the inline text in the content field.  The result carries
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from typing import Any, Mapping
 
 from medre.adapters.lxmf.fields import LxmfFieldsHelper
@@ -56,14 +54,18 @@ from medre.adapters.metadata import project_source_fields
 from medre.core.events import CanonicalEvent
 from medre.core.events.text import select_message_body
 from medre.core.rendering.attribution import (
+    TRUNCATABLE_RELAY_LABELS,
     RelayAttribution,
-    build_relay_attribution,
+    resolve_relay_attribution,
     format_relay_prefix,
 )
 from medre.core.rendering.bridge_context import build_bridge_context
 from medre.core.rendering.relations import degrade_relations_inline
 from medre.core.rendering.renderer import RenderingContext, RenderingResult
-from medre.core.rendering.text_helpers import truncate_text as _truncate_text
+from medre.core.rendering.text_helpers import (
+    truncate_text as _truncate_text,
+    truncate_text_bytes,
+)
 
 # Label variables that accept the ``{nameN}`` first-N-code-points
 # truncation suffix in relay-prefix templates.  Radio displays are the
@@ -71,7 +73,6 @@ from medre.core.rendering.text_helpers import truncate_text as _truncate_text
 # transport; identifier-like variables (``sender_id`` — the fixed-width
 # LXMF source hash — ``platform``, ``channel``, ``route_id``) are
 # deliberately excluded.
-_TRUNCATABLE_VARIABLES: tuple[str, ...] = ("sender", "sender_short", "origin_label")
 
 
 class LxmfRenderer:
@@ -221,7 +222,7 @@ class LxmfRenderer:
             )
 
         if is_fallback:
-            text = self._degrade_relations_inline(event, text)
+            text = degrade_relations_inline(event, text)
 
         # Optional human-readable relay prefix.  Resolved from target
         # adapter config (target-aware). Extracted from event
@@ -231,16 +232,13 @@ class LxmfRenderer:
         prefix_meta: dict[str, object] = {}
         if prefix_template and attr is not None:
             prefix_result = format_relay_prefix(
-                prefix_template, attr, truncatable=_TRUNCATABLE_VARIABLES
+                prefix_template, attr, truncatable=TRUNCATABLE_RELAY_LABELS
             )
-            # On formatting_exception the rendered_prefix is the raw
-            # template — do NOT prepend it to user-facing text.
-            is_exception = (
-                prefix_result.formatting_error
-                and prefix_result.formatting_error.startswith("formatting_exception:")
-            )
-            if prefix_result.rendered_prefix and not is_exception:
-                text = prefix_result.rendered_prefix + text
+            if prefix_result.formatting_error:
+                raise ValueError(
+                    f"Invalid relay_prefix: {prefix_result.formatting_error}"
+                )
+            text = prefix_result.rendered_prefix + text
             prefix_meta["relay_prefix_template"] = prefix_result.template_used
             prefix_meta["relay_prefix_rendered"] = prefix_result.rendered_prefix
             prefix_meta["relay_prefix_variables_used"] = prefix_result.variables_used
@@ -261,6 +259,8 @@ class LxmfRenderer:
         truncated = False
         if ctx.max_text_chars is not None:
             text, truncated = _truncate_text(text, max_text_chars=ctx.max_text_chars)
+        text, byte_truncated, _, _ = truncate_text_bytes(text, ctx.max_text_bytes)
+        truncated = truncated or byte_truncated
 
         # Destination addressing — one authority with a documented
         # precedence (routing-delivery §2.4, transport-profiles/lxmf):
@@ -357,20 +357,6 @@ class LxmfRenderer:
             highest-precedence source.
         """
         source_info = self._source_attribution.get(event.source_adapter)
-        source_origin_label = (
-            getattr(source_info, "origin_label", None) if source_info else None
-        )
-        if ctx is not None and ctx.source_attribution is not None:
-            source = ctx.source_attribution
-            if source.source_origin_label is not None:
-                source_origin_label = source.source_origin_label
-            if ctx.source_origin_label is not None:
-                source_origin_label = ctx.source_origin_label
-            return replace(source, source_origin_label=source_origin_label)
-        if ctx is not None and ctx.source_origin_label is not None:
-            source_origin_label = ctx.source_origin_label
-
-        # Project source identity from native metadata via dispatch.
         native_data: dict[str, object] = {}
         if event.metadata and event.metadata.native:
             native_data = dict(event.metadata.native.data)
@@ -383,9 +369,11 @@ class LxmfRenderer:
             platform_hint=platform_hint,
         )
 
-        attr = build_relay_attribution(
+        attr = resolve_relay_attribution(
             event,
-            source_origin_label=source_origin_label,
+            source_origin_label=ctx.source_origin_label if ctx else None,
+            configured_origin_label=getattr(source_info, "origin_label", None),
+            source_attribution=ctx.source_attribution if ctx else None,
             projected_fields=projected,
         )
 
@@ -394,31 +382,6 @@ class LxmfRenderer:
     # ------------------------------------------------------------------
     # Fallback helpers
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _degrade_relations_inline(
-        event: CanonicalEvent,
-        text: str,
-    ) -> str:
-        """Degrade relation semantics into inline text.
-
-        Delegates to the shared
-        :func:`~medre.core.rendering.relations.degrade_relations_inline`
-        helper.
-
-        Parameters
-        ----------
-        event:
-            The canonical event whose relations to degrade.
-        text:
-            The existing content text.
-
-        Returns
-        -------
-        str
-            Content text with inline relation descriptions appended.
-        """
-        return degrade_relations_inline(event, text)
 
 
 def build_lxmf_renderer(
