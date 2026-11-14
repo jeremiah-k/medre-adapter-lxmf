@@ -56,7 +56,7 @@ from medre.core.rendering.attribution import (
     TRUNCATABLE_RELAY_LABELS,
     RelayAttribution,
     resolve_relay_attribution,
-    format_relay_prefix,
+    format_checked_relay_prefix,
 )
 from medre.core.rendering.bridge_context import build_bridge_context
 from medre.core.rendering.relations import compose_relation_text
@@ -230,7 +230,7 @@ class LxmfRenderer:
         # envelope in fields carries provenance claims, not identity authority.
         prefix_meta: dict[str, object] = {}
         if prefix_template and attr is not None:
-            prefix_result = format_relay_prefix(
+            prefix_result = format_checked_relay_prefix(
                 prefix_template, attr, truncatable=TRUNCATABLE_RELAY_LABELS
             )
             if prefix_result.formatting_error:
