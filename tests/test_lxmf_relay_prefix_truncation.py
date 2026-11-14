@@ -4,13 +4,14 @@ Custom ``relay_prefix`` templates accept ``{nameN}`` first-N-code-point
 truncation for the label variables declared by this transport. LXMF
 radio clients are the constrained-display affordance that motivates
 truncation; identifier-like variables (``sender_id`` — the fixed-width
-LXMF source hash) stay undeclared and their suffixed forms pass through
-as literals.
+LXMF source hash) stay undeclared and their suffixed forms are rejected.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
+
+import pytest
 
 from medre.adapters.lxmf.renderer import LxmfRenderer
 from medre.core.events import CanonicalEvent, EventMetadata
@@ -116,20 +117,18 @@ async def test_sender_short_falls_back_to_compact_display_name() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Undeclared or invalid suffixes pass through unchanged
+# Undeclared or invalid suffixes are rejected
 # ---------------------------------------------------------------------------
 
 
 async def test_zero_suffix_is_not_a_truncation_variable() -> None:
-    result = await _render("{sender0}: ")
-    assert result.payload["content"] == "{sender0}: Testing from Sideband"
-    assert result.metadata["relay_prefix_unknown_variables"] == ("sender0",)
+    with pytest.raises(ValueError, match="Invalid relay_prefix"):
+        await _render("{sender0}: ")
 
 
-async def test_undeclared_stem_with_suffix_stays_literal() -> None:
-    result = await _render("{sender_id3}: ")
-    assert result.payload["content"] == "{sender_id3}: Testing from Sideband"
-    assert result.metadata["relay_prefix_unknown_variables"] == ("sender_id3",)
+async def test_undeclared_stem_with_suffix_rejected() -> None:
+    with pytest.raises(ValueError, match="Invalid relay_prefix"):
+        await _render("{sender_id3}: ")
 
 
 # ---------------------------------------------------------------------------
