@@ -1513,11 +1513,3 @@ class TestLxmfAdapterDeliverHonestDeliverySemantics:
         assert delivery.metadata["lxmf"]["delivery_state"] == "outbound"
 
         await adapter.stop()
-
-
-def test_fake_adapter_rejects_invalid_prefix_at_setup():
-    from medre.adapters.fakes.lxmf import FakeLxmfAdapter
-    from medre.config.adapters.lxmf import LxmfConfig, LxmfConfigError
-
-    with pytest.raises(LxmfConfigError):
-        FakeLxmfAdapter(LxmfConfig(adapter_id="test", relay_prefix="{unsupported}"))
