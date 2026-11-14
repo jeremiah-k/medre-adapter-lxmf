@@ -59,7 +59,7 @@ from medre.core.rendering.attribution import (
     format_relay_prefix,
 )
 from medre.core.rendering.bridge_context import build_bridge_context
-from medre.core.rendering.relations import degrade_relations_inline
+from medre.core.rendering.relations import compose_relation_text
 from medre.core.rendering.renderer import RenderingContext, RenderingResult
 from medre.core.rendering.text_helpers import (
     truncate_text as _truncate_text,
@@ -221,7 +221,7 @@ class LxmfRenderer:
             )
 
         if is_fallback:
-            text = degrade_relations_inline(event, text)
+            text = compose_relation_text(event, text)
 
         # Optional human-readable relay prefix.  Resolved from target
         # adapter config (target-aware). Extracted from event
