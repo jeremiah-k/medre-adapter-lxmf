@@ -51,6 +51,7 @@ that motivates truncation. The label variables `sender`, `sender_short`, and
 templates, rendering the first N Unicode code points of the variable's value.
 The suffix counts code points, never bytes, and N MUST be at least 1
 (`{sender0}` is not a truncation variable). A numeric-suffixed name whose stem
-is not declared truncatable for this transport passes through unchanged — the
+is not declared truncatable for this transport is rejected during configuration
+validation — the
 fixed-width `sender_id` source hash is deliberately left undeclared. The
 shared relay-prefix formatter specification defines the full contract.

@@ -176,16 +176,15 @@ separate qualification tiers.
 
 The repository CI installs MEDRE core and this adapter. Its fake job omits
 native SDK dependencies; its SDK job installs this distribution's declared pins.
-The default core revision is defined by the [test workflow](.github/workflows/test.yml).
-Coordinated contract changes can select an immutable candidate core revision;
-qualify another pair with a one-run dispatch and a full core commit SHA:
+CI resolves MEDRE `main` once per run by default. Keep `MEDRE_CORE_REF` unset;
+qualify a candidate pair with a one-run dispatch and a full core commit SHA:
 
 ```bash
 gh workflow run test.yml --ref ADAPTER_BRANCH -f core_ref=FULL_CORE_COMMIT_SHA
 ```
 
 Record both revisions with the result. The candidate run does not replace the
-adapter PR's checks against its workflow-selected core revision. Follow the
+adapter PR's checks against core `main`. Follow the
 [coordinated-change policy](https://github.com/jeremiah-k/medre/blob/main/docs/dev/coordinated-changes.md)
 for dependency order and merged compatibility pins.
 
