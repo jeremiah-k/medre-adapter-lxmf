@@ -107,13 +107,13 @@ async def test_origin_label_truncation_suffix() -> None:
 
 
 async def test_sender_short_truncation_suffix() -> None:
-    result = await _render("{sender_short4}: ", short_name="tadchilly")
-    assert result.payload["content"] == "tadc: Testing from Sideband"
+    result = await _render("{sender_short4}: ", short_name="bobsmith")
+    assert result.payload["content"] == "bobs: Testing from Sideband"
 
 
 async def test_sender_short_falls_back_to_compact_display_name() -> None:
     result = await _render("{sender_short4}: ")
-    assert result.payload["content"] == "TadC: Testing from Sideband"
+    assert result.payload["content"] == "BobS: Testing from Sideband"
 
 
 # ---------------------------------------------------------------------------
