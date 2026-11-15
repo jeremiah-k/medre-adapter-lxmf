@@ -57,7 +57,9 @@ Variable                    Description
 ``LXMF_RETICULUM_CONFIG_DIR``  Optional isolated Reticulum config directory.
                             Required for RF-bound evidence: without it the
                             session uses the process-default Reticulum
-                            config (typically AutoInterface).
+                            config (typically AutoInterface). Must point
+                            to an existing, nonempty config file's directory.
+                            Selection alone does not prove the RF path.
 ``LXMF_LIVE_SEND``          Set to ``1`` to enable real outbound send tests.
                             Without this, tests that transmit real messages
                             are skipped.
@@ -127,6 +129,7 @@ from medre_lxmf_tests.helpers.live_harness import (
     bounded,
     live_env_status,
 )
+from medre_lxmf_tests.helpers.live_reticulum_config import resolve_live_config_dir
 
 # ---------------------------------------------------------------------------
 # Module-level marker — entire file is tagged "live" so it is excluded by the
@@ -204,7 +207,10 @@ def _make_config():
     ``LXMF_RETICULUM_CONFIG_DIR`` selects an isolated Reticulum
     configuration directory.  Without it the session would fall back to
     the process-default Reticulum config (typically AutoInterface on the
-    LAN), so live RF evidence could silently use a non-LoRa path.
+    LAN). An explicit profile is checked before native startup so a typo
+    cannot cause the SDK to create or select an unintended default profile.
+    The operator must independently establish that its active interfaces
+    are isolated and that RF is actually observed.
     """
     from medre.config.adapters.lxmf import LxmfConfig
 
@@ -214,7 +220,7 @@ def _make_config():
         identity_path=LXMF_IDENTITY_PATH or None,
         display_name=LXMF_DISPLAY_NAME,
         storage_path=LXMF_STORAGE_PATH or "/tmp/medre-live-lxmf-router",
-        reticulum_config_dir=LXMF_RETICULUM_CONFIG_DIR or None,
+        reticulum_config_dir=resolve_live_config_dir(LXMF_RETICULUM_CONFIG_DIR),
     )
 
 
