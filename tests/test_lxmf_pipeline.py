@@ -9,10 +9,6 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from medre.adapters.fakes.lxmf import FakeLxmfAdapter
-from medre.adapters.lxmf.fields import FIELD_MEDRE_ENVELOPE, LXMF_NAMESPACE
-from medre.adapters.lxmf.renderer import LxmfRenderer
-from medre.config.adapters.lxmf import LxmfConfig
 from medre.core.engine.pipeline import PipelineConfig, PipelineRunner
 from medre.core.events import CanonicalEvent, EventMetadata
 from medre.core.events.bus import EventBus
@@ -21,6 +17,11 @@ from medre.core.planning.relation_resolution import RelationResolver
 from medre.core.rendering.renderer import RenderingPipeline
 from medre.core.rendering.text import TextRenderer
 from medre.core.routing import Route, Router, RouteSource, RouteTarget
+
+from medre.adapters.fakes.lxmf import FakeLxmfAdapter
+from medre.adapters.lxmf.fields import FIELD_MEDRE_ENVELOPE, LXMF_NAMESPACE
+from medre.adapters.lxmf.renderer import LxmfRenderer
+from medre.config.adapters.lxmf import LxmfConfig
 
 
 def _make_text_packet(

@@ -1,18 +1,13 @@
 """LXMF carries source attribution even when its visible prefix is disabled."""
 
-from datetime import datetime, timezone
-from types import SimpleNamespace
 import json
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import msgspec
 import pytest
 from jsonschema import Draft202012Validator
-
-from medre.adapters.lxmf.codec import LxmfCodec
-from medre.adapters.lxmf.fields import LxmfFieldsHelper, FIELD_MEDRE_ENVELOPE
-from medre.adapters.lxmf.renderer import LxmfRenderer
-from medre.config.adapters.lxmf import LxmfConfig
 from medre.core.events import (
     CanonicalEvent,
     EventMetadata,
@@ -22,6 +17,11 @@ from medre.core.events import (
 )
 from medre.core.rendering.attribution import RelayAttribution
 from medre.core.rendering.renderer import RenderingContext
+
+from medre.adapters.lxmf.codec import LxmfCodec
+from medre.adapters.lxmf.fields import FIELD_MEDRE_ENVELOPE, LxmfFieldsHelper
+from medre.adapters.lxmf.renderer import LxmfRenderer
+from medre.config.adapters.lxmf import LxmfConfig
 
 
 def source_event(payload=None, relations=()):

@@ -13,7 +13,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from medre.adapters.lxmf.renderer import LxmfRenderer
 from medre.config.errors import ConfigValidationError
 from medre.config.route_expansion import expand_route_config
 from medre.config.routes import RouteConfig, RouteDestinationConfig
@@ -21,6 +20,8 @@ from medre.core.rendering.renderer import RenderingPipeline
 from medre.core.routing.models import RouteDestination
 from medre_lxmf_tests.helpers.rendering_evidence import make_context
 from medre_lxmf_tests.helpers.rendering_evidence import make_event as _make_event
+
+from medre.adapters.lxmf.renderer import LxmfRenderer
 
 _VALID_HASH = "e5f6a7b8c9d0e1f2a1b2c3d4e5f6a7b8"
 

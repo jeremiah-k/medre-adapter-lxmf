@@ -19,8 +19,8 @@ from medre.adapters.lxmf.worker_protocol import (
     read_sync,
 )
 from medre.adapters.lxmf.worker_state import (
-    WorkerProfile,
     SubmissionRecord,
+    WorkerProfile,
     payload_digest,
 )
 from medre.config.adapters.lxmf import LxmfConfig

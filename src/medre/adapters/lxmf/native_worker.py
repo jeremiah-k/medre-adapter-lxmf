@@ -11,6 +11,8 @@ import sys
 from dataclasses import asdict, replace
 from typing import Any, BinaryIO, Literal, cast
 
+from medre.core.observability.sanitization import sanitize_error
+
 from medre.adapters.lxmf.errors import LxmfHandoffUnknownError, LxmfSendError
 from medre.adapters.lxmf.worker_protocol import (
     DeliveryUpdate,
@@ -36,7 +38,6 @@ from medre.adapters.lxmf.worker_state import (
     WorkerProfile,
     payload_digest,
 )
-from medre.core.observability.sanitization import sanitize_error
 from medre.config.adapters.lxmf import LxmfConfig
 
 

@@ -19,8 +19,9 @@ import sys
 from pathlib import Path
 
 import pytest
-from medre.adapters.lxmf.compat import HAS_LXMF
 from medre_lxmf_tests.helpers.sdk_contract import declared_extra_pins
+
+from medre.adapters.lxmf.compat import HAS_LXMF
 
 pytestmark = [
     pytest.mark.local_integration,

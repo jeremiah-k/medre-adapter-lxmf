@@ -139,8 +139,8 @@ from typing import Any, Awaitable, Callable, Coroutine
 from medre.adapters.lxmf.compat import HAS_LXMF, _require_lxmf
 from medre.adapters.lxmf.errors import (
     LxmfConnectionError,
-    LxmfSendError,
     LxmfHandoffUnknownError,
+    LxmfSendError,
 )
 from medre.config.adapters.lxmf import LxmfConfig
 

@@ -8,8 +8,9 @@ import signal
 import struct
 import sys
 
-import pytest
 import msgspec
+import pytest
+from medre_lxmf_tests.helpers.async_utils import wait_until
 
 from medre.adapters.lxmf.errors import LxmfConnectionError
 from medre.adapters.lxmf.native_process import NativeWorker
@@ -22,7 +23,6 @@ from medre.adapters.lxmf.worker_protocol import (
     read_sync,
 )
 from medre.config.adapters.lxmf import LxmfConfig
-from medre_lxmf_tests.helpers.async_utils import wait_until
 
 _CHILD = """
 import os, signal, sys, time

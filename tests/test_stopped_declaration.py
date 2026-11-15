@@ -8,9 +8,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
-from medre.adapters.lxmf.plugin import adapter_spec
-from medre.adapters.lxmf.stopped_declaration import declaration
 from medre.maintenance.stopped_declare import (
     DeclaredFile,
     ExclusionRefused,
@@ -25,6 +22,9 @@ from medre.maintenance.stopped_snapshot import (
     restore_stopped_snapshot,
     verify_stopped_snapshot,
 )
+
+from medre.adapters.lxmf.plugin import adapter_spec
+from medre.adapters.lxmf.stopped_declaration import declaration
 
 
 def _settings(root: Path, **kw: object) -> SimpleNamespace:

@@ -48,23 +48,22 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from medre.adapters.lxmf.fields import LxmfFieldsHelper
 from medre.adapters.metadata import project_source_fields
 from medre.core.events import CanonicalEvent
 from medre.core.events.text import select_message_body
 from medre.core.rendering.attribution import (
     TRUNCATABLE_RELAY_LABELS,
     RelayAttribution,
-    resolve_relay_attribution,
     format_checked_relay_prefix,
+    resolve_relay_attribution,
 )
 from medre.core.rendering.bridge_context import build_bridge_context
 from medre.core.rendering.relations import compose_relation_text
 from medre.core.rendering.renderer import RenderingContext, RenderingResult
-from medre.core.rendering.text_helpers import (
-    truncate_text as _truncate_text,
-    truncate_text_bytes,
-)
+from medre.core.rendering.text_helpers import truncate_text as _truncate_text
+from medre.core.rendering.text_helpers import truncate_text_bytes
+
+from medre.adapters.lxmf.fields import LxmfFieldsHelper
 
 # Label variables that accept the ``{nameN}`` first-N-code-points
 # truncation suffix in relay-prefix templates.  Radio displays are the

@@ -5,6 +5,8 @@ import sys
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from medre_lxmf_tests.helpers.async_utils import wait_until
+from test_lxmf_delivery_observations import _context, _rendering_result
 
 from medre.adapters.lxmf.adapter import LxmfAdapter
 from medre.adapters.lxmf.errors import LxmfHandoffUnknownError, LxmfSendError
@@ -12,8 +14,6 @@ from medre.adapters.lxmf.session import LxmfDeliveryState
 from medre.adapters.lxmf.session_context import LxmfDeliveryContext
 from medre.adapters.lxmf.worker_session import WorkerSession
 from medre.config.adapters.lxmf import LxmfConfig
-from medre_lxmf_tests.helpers.async_utils import wait_until
-from test_lxmf_delivery_observations import _context, _rendering_result
 
 # Execute the production worker loop with its SDK session replaced by a fake.
 # Submission, journal, protocol, channel and parent callbacks remain real.

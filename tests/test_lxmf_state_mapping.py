@@ -17,6 +17,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from medre.adapters.lxmf.errors import LxmfHandoffUnknownError, LxmfSendError
 from medre.adapters.lxmf.session import (
     LxmfDeliveryState,
@@ -344,10 +345,11 @@ class TestLxmfFallbackNoDuplication:
     async def test_fallback_envelope_has_empty_relations(self) -> None:
         """Under fallback_text, the MEDRE envelope carries empty relations
         to avoid duplicating relation data as both structured and inline."""
-        from medre.adapters.lxmf.fields import LxmfFieldsHelper
-        from medre.adapters.lxmf.renderer import LxmfRenderer
         from medre.core.events import EventRelation
         from medre_lxmf_tests.helpers.rendering_evidence import make_context, make_event
+
+        from medre.adapters.lxmf.fields import LxmfFieldsHelper
+        from medre.adapters.lxmf.renderer import LxmfRenderer
 
         renderer = LxmfRenderer(metadata_embedding=True)
         rel = EventRelation(
@@ -383,10 +385,11 @@ class TestLxmfFallbackNoDuplication:
 
     async def test_normal_mode_envelope_has_structured_relations(self) -> None:
         """Under normal delivery_strategy, envelope carries full relations."""
-        from medre.adapters.lxmf.fields import LxmfFieldsHelper
-        from medre.adapters.lxmf.renderer import LxmfRenderer
         from medre.core.events import EventRelation
         from medre_lxmf_tests.helpers.rendering_evidence import make_context, make_event
+
+        from medre.adapters.lxmf.fields import LxmfFieldsHelper
+        from medre.adapters.lxmf.renderer import LxmfRenderer
 
         renderer = LxmfRenderer(metadata_embedding=True)
         rel = EventRelation(

@@ -14,13 +14,13 @@ from types import SimpleNamespace
 
 import pytest
 from medre_lxmf_tests.helpers import native_recovery
+from medre_lxmf_tests.helpers.native_chat_events import command as _command
+from medre_lxmf_tests.helpers.native_chat_events import event as _event
+from medre_lxmf_tests.helpers.native_chat_events import inbound as _inbound
 from medre_lxmf_tests.helpers.native_chat_events import (
-    command as _command,
-    event as _event,
-    inbound as _inbound,
     outbound_received as _outbound_received,
-    submit as _submit,
 )
+from medre_lxmf_tests.helpers.native_chat_events import submit as _submit
 
 # This campaign starts an independent Reticulum service and a live native peer.
 # Run it in the required local integration job, separately from SDK API
@@ -71,15 +71,16 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
     pytest.importorskip("RNS")
     pytest.importorskip("LXMF")
 
-    from medre.adapters.lxmf.plugin import adapter_spec
-    from medre.adapters.lxmf.worker_session import WorkerSession
-    from medre.adapters.lxmf.worker_state import SubmissionRecord, WorkerProfile
-    from medre.config.adapters.lxmf import LxmfConfig
     from medre.maintenance import stopped_declare as maintenance
     from medre.maintenance.stopped_snapshot import (
         restore_stopped_snapshot,
         verify_stopped_snapshot,
     )
+
+    from medre.adapters.lxmf.plugin import adapter_spec
+    from medre.adapters.lxmf.worker_session import WorkerSession
+    from medre.adapters.lxmf.worker_state import SubmissionRecord, WorkerProfile
+    from medre.config.adapters.lxmf import LxmfConfig
 
     network = tmp_path / "independent-reticulum"
     network.mkdir()

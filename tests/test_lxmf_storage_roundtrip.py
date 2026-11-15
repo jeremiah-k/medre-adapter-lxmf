@@ -14,8 +14,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from medre.adapters.lxmf.codec import LxmfCodec
-from medre.config.adapters.lxmf import LxmfConfig
 from medre.core.events import (
     CanonicalEvent,
     DeliveryReceipt,
@@ -25,6 +23,9 @@ from medre.core.events import (
 )
 from medre.core.events.metadata import NativeMetadata
 from medre_lxmf_tests.helpers.native_metadata import lxmf_native_data
+
+from medre.adapters.lxmf.codec import LxmfCodec
+from medre.config.adapters.lxmf import LxmfConfig
 
 # ---------------------------------------------------------------------------
 # Helpers

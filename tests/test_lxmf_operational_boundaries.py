@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from medre.adapters.lxmf.compat import HAS_LXMF
 
 _SESSION_BASELINE_SDK_MODULES: frozenset[str] = frozenset(
@@ -342,9 +343,10 @@ class TestLxmfFakeAdapterOperability:
         replay tests.  If the fake delivery path required SDK types, those
         tests would fail in clean environments.
         """
+        from medre.core.rendering.renderer import RenderingResult
+
         from medre.adapters.fakes.lxmf import FakeLxmfAdapter
         from medre.config.adapters.lxmf import LxmfConfig
-        from medre.core.rendering.renderer import RenderingResult
 
         config = LxmfConfig(adapter_id="test_op_deliver")
         adapter = FakeLxmfAdapter(config)

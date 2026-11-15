@@ -6,11 +6,12 @@ text-bearing ``display_name`` and ``short_name`` fields inside ``native.lxmf``.
 
 from __future__ import annotations
 
+from medre_lxmf_tests.helpers.native_metadata import lxmf_native_data
+
 from medre.adapters.lxmf.attribution import (
     normalize_source_hash,
     project_lxmf_attribution,
 )
-from medre_lxmf_tests.helpers.native_metadata import lxmf_native_data
 
 
 def _project(

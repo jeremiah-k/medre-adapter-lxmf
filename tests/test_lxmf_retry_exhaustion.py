@@ -13,6 +13,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from medre.adapters.lxmf.errors import LxmfSendError
 from medre.adapters.lxmf.session import LxmfSession
 from medre.config.adapters.lxmf import LxmfConfig

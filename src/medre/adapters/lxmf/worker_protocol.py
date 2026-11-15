@@ -9,8 +9,8 @@ from typing import Annotated, Any, BinaryIO, Literal, TypeAlias
 
 import msgspec
 
-from medre.config.adapters.lxmf import LxmfConfig
 from medre.adapters.lxmf.session import LxmfDeliveryState, LxmfSessionDiagnostics
+from medre.config.adapters.lxmf import LxmfConfig
 
 MAX_FRAME_BYTES = 1024 * 1024
 

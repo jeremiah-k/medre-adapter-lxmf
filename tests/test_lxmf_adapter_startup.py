@@ -13,11 +13,12 @@ import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from medre.core.contracts.adapter import AdapterContext
+from medre.core.events import CanonicalEvent
+
 from medre.adapters.lxmf.adapter import LxmfAdapter
 from medre.adapters.lxmf.errors import LxmfConnectionError
 from medre.config.adapters.lxmf import LxmfConfig
-from medre.core.contracts.adapter import AdapterContext
-from medre.core.events import CanonicalEvent
 
 # -- Helpers ---------------------------------------------------------------
 
