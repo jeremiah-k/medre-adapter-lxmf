@@ -112,11 +112,27 @@ def _participants_available(peer: dict[str, object], worker: dict[str, object]) 
     )
 
 
+def _announce_seen(peer: dict[str, object]) -> bool:
+    """Report whether the peer observed a matching destination announce.
+
+    An observed announce is the path-availability precursor: the pinned SDK
+    registers the path from it on the router's next processing pass, so a
+    fresh announce with an unknown path means path learning is in progress
+    rather than dead. A missing announce leaves the strict refusal intact.
+    """
+    age = peer.get("matching_announce_age_seconds")
+    return isinstance(age, (int, float)) and not isinstance(age, bool) and age >= 0
+
+
 def recovery_is_available(peer: dict[str, object], worker: dict[str, object]) -> bool:
     """Grant extra observation only on complete, positive native recovery facts."""
     if not _participants_available(peer, worker):
         return False
-    if peer.get("path_known") is not True and not _usable_link(peer):
+    if (
+        peer.get("path_known") is not True
+        and not _usable_link(peer)
+        and not _announce_seen(peer)
+    ):
         return False
     state = peer.get("message_state_name")
     if not isinstance(state, str) or state not in _PENDING_MESSAGE_STATES:
@@ -221,8 +237,9 @@ async def inbound(
     The first deadline is the ordinary qualification verdict. When it expires,
     the peer's unfinished attempt may still be inside the pinned SDK's retry
     and link-establishment cycle; the caller may then grant an explicit,
-    SDK-derived recovery window. Terminal states, exhausted attempts, a lost
-    path, or an unavailable worker end recovery at the next bounded status check.
+    SDK-derived recovery window. Terminal states, exhausted attempts, a path
+    with no observed matching announce, or an unavailable worker end recovery
+    at the next bounded status check.
     Sender delivery during an admitted window still needs exact recipient handoff.
     The complete receive budget includes diagnostic time. Diagnostics never resend,
     reset routing, or create a connection to make a test pass.
