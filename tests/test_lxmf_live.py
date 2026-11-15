@@ -360,8 +360,9 @@ class TestLxmfLiveSmoke:
         ``LxmfAdapter`` returns ``"unknown"`` with ``platform ==
         "lxmf"`` before any ``start()`` call.
         """
-        from medre.adapters.lxmf.adapter import LxmfAdapter
         from medre.core.contracts.adapter import AdapterRole
+
+        from medre.adapters.lxmf.adapter import LxmfAdapter
 
         config = _make_config()
         adapter = LxmfAdapter(config)
@@ -430,8 +431,9 @@ class TestLxmfLiveSmoke:
         with a deterministic native message ID and ``lxmf.delivery_state``
         metadata set to ``"outbound"`` (honest pending semantics).
         """
-        from medre.adapters.lxmf.adapter import LxmfAdapter
         from medre.core.contracts.adapter import AdapterHandoffResult
+
+        from medre.adapters.lxmf.adapter import LxmfAdapter
 
         config = _make_fake_config()
         adapter = LxmfAdapter(config)
@@ -481,8 +483,9 @@ class TestLxmfLiveSmoke:
         Verifies that repeated calls to ``deliver()`` return unique
         native message IDs from the session's fake-mode send path.
         """
-        from medre.adapters.lxmf.adapter import LxmfAdapter
         from medre.core.rendering.renderer import RenderingResult
+
+        from medre.adapters.lxmf.adapter import LxmfAdapter
 
         config = _make_fake_config()
         adapter = LxmfAdapter(config)
@@ -540,8 +543,9 @@ class TestLxmfLiveSmoke:
         validation which works in any connection mode.  Uses fake mode
         so the adapter can start without Reticulum.
         """
-        from medre.adapters.lxmf.adapter import LxmfAdapter
         from medre.core.contracts.adapter import AdapterPermanentError
+
+        from medre.adapters.lxmf.adapter import LxmfAdapter
 
         config = _make_fake_config()
         adapter = LxmfAdapter(config)
@@ -568,8 +572,9 @@ class TestLxmfLiveSmoke:
         This validates the same codec/classifier pipeline used by real
         inbound callbacks from the session.
         """
-        from medre.adapters.lxmf.adapter import LxmfAdapter
         from medre_lxmf_tests.fixtures.lxmf_packets import make_lxmf_text_packet
+
+        from medre.adapters.lxmf.adapter import LxmfAdapter
 
         publish_mock = AsyncMock()
         config = _make_fake_config()
@@ -777,9 +782,10 @@ class TestLxmfLiveSmoke:
         verify unknown.  Uses fake mode; ``deliver()`` returns a real
         ``AdapterHandoffResult`` with ``lxmf`` delivery-state metadata.
         """
-        from medre.adapters.lxmf.adapter import LxmfAdapter
         from medre.core.contracts.adapter import AdapterHandoffResult
         from medre.core.rendering.renderer import RenderingResult
+
+        from medre.adapters.lxmf.adapter import LxmfAdapter
 
         config = _make_fake_config()
         adapter = LxmfAdapter(config)
@@ -863,9 +869,10 @@ class TestLxmfLiveSmoke:
         Wraps the core async operations in ``asyncio.wait_for`` to verify
         they do not hang or deadlock.
         """
-        from medre.adapters.lxmf.adapter import LxmfAdapter
         from medre.core.contracts.adapter import AdapterHandoffResult
         from medre.core.rendering.renderer import RenderingResult
+
+        from medre.adapters.lxmf.adapter import LxmfAdapter
 
         config = _make_fake_config()
         adapter = LxmfAdapter(config)
@@ -907,8 +914,9 @@ class TestLxmfLiveSmoke:
         After delivering a message in fake mode, the session diagnostics
         must expose ``pending_delivery_count`` as a non-negative integer.
         """
-        from medre.adapters.lxmf.adapter import LxmfAdapter
         from medre.core.rendering.renderer import RenderingResult
+
+        from medre.adapters.lxmf.adapter import LxmfAdapter
 
         config = _make_fake_config()
         adapter = LxmfAdapter(config)
@@ -1033,8 +1041,9 @@ class TestLxmfLiveSmoke:
         ``session.delivery_state_counts()`` returns a ``dict[str, int]``
         with at least one key matching a known delivery state.
         """
-        from medre.adapters.lxmf.adapter import LxmfAdapter
         from medre.core.rendering.renderer import RenderingResult
+
+        from medre.adapters.lxmf.adapter import LxmfAdapter
 
         config = _make_fake_config()
         adapter = LxmfAdapter(config)
@@ -1110,10 +1119,11 @@ class TestLxmfLiveSmoke:
 
         Skips if any required variable is missing or the SDK is unavailable.
         """
-        from medre.adapters.lxmf.adapter import LxmfAdapter
-        from medre.adapters.lxmf.errors import LxmfConnectionError
         from medre.core.contracts.adapter import AdapterHandoffResult
         from medre.core.rendering.renderer import RenderingResult
+
+        from medre.adapters.lxmf.adapter import LxmfAdapter
+        from medre.adapters.lxmf.errors import LxmfConnectionError
 
         if not LXMF_DESTINATION_HASH:
             pytest.skip("LXMF_DESTINATION_HASH required for real send test")
@@ -1288,10 +1298,11 @@ class TestLxmfTopologyLive:
 
         dest_hash = LXMF_DESTINATION_HASH
 
-        from medre.adapters.lxmf.adapter import LxmfAdapter
-        from medre.adapters.lxmf.errors import LxmfConnectionError
         from medre.core.contracts.adapter import AdapterHandoffResult
         from medre.core.rendering.renderer import RenderingResult
+
+        from medre.adapters.lxmf.adapter import LxmfAdapter
+        from medre.adapters.lxmf.errors import LxmfConnectionError
 
         config = _make_config()
         adapter = LxmfAdapter(config)

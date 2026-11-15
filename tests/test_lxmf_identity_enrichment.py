@@ -23,12 +23,13 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from medre.adapters._attribution_dispatch import project_source_fields
-from medre.adapters.lxmf.adapter import LxmfAdapter
-from medre.config.adapters.lxmf import LxmfConfig
 from medre.core.events import CanonicalEvent, EventMetadata
 from medre.core.events.metadata import NativeMetadata
 from medre.core.rendering.renderer import RenderingContext
 from medre_lxmf_tests.helpers.lxmf_renderer import lxmf_renderer_with_prefix
+
+from medre.adapters.lxmf.adapter import LxmfAdapter
+from medre.config.adapters.lxmf import LxmfConfig
 
 # ---------------------------------------------------------------------------
 # Helpers

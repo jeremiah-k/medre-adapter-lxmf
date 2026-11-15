@@ -33,10 +33,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from medre.adapters.lxmf.codec import LxmfCodec
-from medre.adapters.lxmf.event_shape import LXMF_NATIVE_SCHEMA_VERSION
-from medre.adapters.lxmf.packet_classifier import LxmfPacketClassifier
-from medre.config.adapters.lxmf import LxmfConfig
 from medre.core.contracts.adapter import (
     AdapterCapabilities,
     AdapterContext,
@@ -51,6 +47,11 @@ from medre.core.events.canonical import CanonicalEvent
 from medre.core.events.kinds import EventKind
 from medre.core.events.metadata import EventMetadata
 from medre.core.rendering.renderer import RenderingResult
+
+from medre.adapters.lxmf.codec import LxmfCodec
+from medre.adapters.lxmf.event_shape import LXMF_NATIVE_SCHEMA_VERSION
+from medre.adapters.lxmf.packet_classifier import LxmfPacketClassifier
+from medre.config.adapters.lxmf import LxmfConfig
 
 _logger = logging.getLogger(__name__)
 

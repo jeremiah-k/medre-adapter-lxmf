@@ -13,6 +13,8 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from medre_lxmf_tests.helpers.async_utils import wait_until
+
 from medre.adapters.lxmf.errors import (
     LxmfConnectionError,
 )
@@ -21,7 +23,6 @@ from medre.adapters.lxmf.session import (
     LxmfSession,
 )
 from medre.config.adapters.lxmf import LxmfConfig
-from medre_lxmf_tests.helpers.async_utils import wait_until
 
 
 def _make_config(**overrides: Any) -> LxmfConfig:

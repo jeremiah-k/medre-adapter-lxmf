@@ -14,8 +14,8 @@ from typing import Protocol, cast
 
 from medre.adapters.lxmf.errors import LxmfConnectionError
 from medre.adapters.lxmf.process_group import OwnedProcessGroup
-from medre.adapters.lxmf.worker_environment import native_environment
 from medre.adapters.lxmf.worker_channel import WorkerChannel
+from medre.adapters.lxmf.worker_environment import native_environment
 from medre.adapters.lxmf.worker_protocol import (
     Failed,
     Ready,

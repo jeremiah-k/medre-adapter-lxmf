@@ -24,6 +24,10 @@ import re
 from datetime import datetime, timezone
 
 import pytest
+from medre.core.contracts.adapter import AdapterPermanentError, AdapterSendError
+from medre.core.events import CanonicalEvent, EventMetadata
+from medre.core.rendering.renderer import RenderingContext, RenderingResult
+
 from medre.adapters.fakes.lxmf import FakeLxmfAdapter
 from medre.adapters.lxmf.adapter import LxmfAdapter
 from medre.adapters.lxmf.codec import LxmfCodec
@@ -31,9 +35,6 @@ from medre.adapters.lxmf.errors import LxmfSendError
 from medre.adapters.lxmf.packet_classifier import LxmfPacketClassifier
 from medre.adapters.lxmf.renderer import LxmfRenderer
 from medre.config.adapters.lxmf import LxmfConfig
-from medre.core.contracts.adapter import AdapterPermanentError, AdapterSendError
-from medre.core.events import CanonicalEvent, EventMetadata
-from medre.core.rendering.renderer import RenderingContext, RenderingResult
 
 
 def _read_module_source(module) -> str:

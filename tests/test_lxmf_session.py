@@ -12,6 +12,8 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from medre_lxmf_tests.helpers.async_utils import wait_until
+
 from medre.adapters.lxmf.errors import (
     LxmfConnectionError,
     LxmfSendError,
@@ -24,7 +26,6 @@ from medre.adapters.lxmf.session import (
     _map_delivery_state,
 )
 from medre.config.adapters.lxmf import LxmfConfig
-from medre_lxmf_tests.helpers.async_utils import wait_until
 
 
 def _make_config(**overrides: Any) -> LxmfConfig:
@@ -1266,10 +1267,11 @@ class TestDeliveryStateMetadataNamespacing:
         from datetime import datetime, timezone
         from unittest.mock import AsyncMock
 
-        from medre.adapters.lxmf.adapter import LxmfAdapter
-        from medre.adapters.lxmf.session import LxmfDeliveryState
         from medre.core.contracts.adapter import AdapterContext
         from medre.core.rendering.renderer import RenderingResult
+
+        from medre.adapters.lxmf.adapter import LxmfAdapter
+        from medre.adapters.lxmf.session import LxmfDeliveryState
 
         config = _make_config(connection_type="fake")
         adapter = LxmfAdapter(config)
@@ -1313,9 +1315,10 @@ class TestDeliveryStateMetadataNamespacing:
         from datetime import datetime, timezone
         from unittest.mock import AsyncMock
 
-        from medre.adapters.lxmf.adapter import LxmfAdapter
         from medre.core.contracts.adapter import AdapterContext
         from medre.core.rendering.renderer import RenderingResult
+
+        from medre.adapters.lxmf.adapter import LxmfAdapter
 
         config = _make_config(connection_type="fake")
         adapter = LxmfAdapter(config)
@@ -1356,9 +1359,10 @@ class TestDeliveryStateMetadataNamespacing:
         from datetime import datetime, timezone
         from unittest.mock import AsyncMock
 
-        from medre.adapters.lxmf.adapter import LxmfAdapter
         from medre.core.contracts.adapter import AdapterContext
         from medre.core.rendering.renderer import RenderingResult
+
+        from medre.adapters.lxmf.adapter import LxmfAdapter
 
         config = _make_config(connection_type="fake")
         adapter = LxmfAdapter(config)

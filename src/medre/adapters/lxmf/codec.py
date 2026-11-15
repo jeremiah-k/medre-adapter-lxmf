@@ -15,15 +15,16 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Literal, cast
 
-from medre.adapters.lxmf.errors import LxmfCodecError
-from medre.adapters.lxmf.event_shape import build_lxmf_native_metadata
-from medre.adapters.lxmf.fields import LxmfFieldsHelper
-from medre.adapters.lxmf.packet_classifier import LxmfPacketClassifier
 from medre.core.contracts.adapter import AdapterCodec
 from medre.core.events.canonical import CanonicalEvent, EventRelation, NativeRef
 from medre.core.events.kinds import EventKind
 from medre.core.events.metadata import EventMetadata, NativeMetadata
 from medre.core.events.schema import VALID_RELATION_TYPES
+
+from medre.adapters.lxmf.errors import LxmfCodecError
+from medre.adapters.lxmf.event_shape import build_lxmf_native_metadata
+from medre.adapters.lxmf.fields import LxmfFieldsHelper
+from medre.adapters.lxmf.packet_classifier import LxmfPacketClassifier
 
 
 class LxmfCodec(AdapterCodec):

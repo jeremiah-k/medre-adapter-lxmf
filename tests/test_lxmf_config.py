@@ -6,6 +6,7 @@ stamp_cost, and metadata safety.
 from __future__ import annotations
 
 import pytest
+
 from medre.config.adapters.lxmf import LxmfConfig
 from medre.config.adapters.lxmf_errors import LxmfConfigError
 

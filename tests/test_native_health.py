@@ -3,16 +3,16 @@
 import asyncio
 import os
 import sys
+from dataclasses import replace
 
 import pytest
-from dataclasses import replace
+from medre_lxmf_tests.helpers.async_utils import wait_until
 
 from medre.adapters.lxmf.adapter import LxmfAdapter
 from medre.adapters.lxmf.errors import LxmfConnectionError
 from medre.adapters.lxmf.worker_protocol import Status
 from medre.adapters.lxmf.worker_session import WorkerSession
 from medre.config.adapters.lxmf import LxmfConfig
-from medre_lxmf_tests.helpers.async_utils import wait_until
 
 
 async def start_adapter(tmp_path, make_adapter_context, reports):

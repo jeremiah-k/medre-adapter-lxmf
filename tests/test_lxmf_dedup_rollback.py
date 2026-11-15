@@ -26,6 +26,7 @@ import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
+
 from medre.adapters.lxmf.adapter import LxmfAdapter
 from medre.config.adapters.lxmf import LxmfConfig
 

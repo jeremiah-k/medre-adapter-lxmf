@@ -25,14 +25,14 @@ SDK is unavailable or production connectivity is not yet implemented.
 
 from __future__ import annotations
 
-from medre.core.rendering.attribution import (
-    validate_relay_prefix,
-    TRUNCATABLE_RELAY_LABELS,
-)
-
 import math
 from dataclasses import dataclass
 from typing import Literal, Self
+
+from medre.core.rendering.attribution import (
+    TRUNCATABLE_RELAY_LABELS,
+    validate_relay_prefix,
+)
 
 from medre.config.adapters.lxmf_errors import LxmfConfigError
 

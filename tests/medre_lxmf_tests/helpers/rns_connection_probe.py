@@ -15,9 +15,10 @@ from medre_lxmf_tests.helpers.async_utils import wait_until
 
 async def _run(base: Path) -> dict[str, bool]:
     import RNS
+    from RNS.Interfaces.TCPInterface import HDLC
+
     from medre.adapters.lxmf.session import LxmfSession
     from medre.config.adapters.lxmf import LxmfConfig
-    from RNS.Interfaces.TCPInterface import HDLC
 
     loop = asyncio.get_running_loop()
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

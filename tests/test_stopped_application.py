@@ -7,10 +7,10 @@ from contextlib import closing
 from dataclasses import replace
 
 import pytest
+from medre.maintenance.stopped_declare import ExclusionRefused, StoppedPlanError
 
 from medre.adapters.lxmf.stopped_declaration import declaration
 from medre.config.adapters.lxmf import LxmfConfig
-from medre.maintenance.stopped_declare import ExclusionRefused, StoppedPlanError
 
 
 def _profile(root):

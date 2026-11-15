@@ -46,20 +46,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from medre.core.events.canonical import CanonicalEvent
 
-from medre.adapters.lxmf.codec import LxmfCodec
-from medre.adapters.lxmf.compat import HAS_LXMF
-from medre.adapters.lxmf.errors import (
-    LxmfConnectionError,
-    LxmfSendError,
-)
-from medre.adapters.lxmf.event_shape import LXMF_NATIVE_SCHEMA_VERSION
-from medre.adapters.lxmf.packet_classifier import LxmfPacketClassifier
-from medre.adapters.lxmf.session import LxmfSession
-from medre.adapters.lxmf.worker_session import WorkerSession
-from medre.adapters.lxmf.session_context import (
-    LxmfDeliveryContext as _LxmfDeliveryObservationContext,
-)
-from medre.config.adapters.lxmf import LxmfConfig
 from medre.core.contracts.adapter import (
     AdapterCapabilities,
     AdapterContext,
@@ -78,6 +64,21 @@ from medre.core.events.delivery import (
 )
 from medre.core.rendering.renderer import RenderingResult
 from medre.core.supervision.diagnostic_contract import PENDING_DELIVERY_COUNT
+
+from medre.adapters.lxmf.codec import LxmfCodec
+from medre.adapters.lxmf.compat import HAS_LXMF
+from medre.adapters.lxmf.errors import (
+    LxmfConnectionError,
+    LxmfSendError,
+)
+from medre.adapters.lxmf.event_shape import LXMF_NATIVE_SCHEMA_VERSION
+from medre.adapters.lxmf.packet_classifier import LxmfPacketClassifier
+from medre.adapters.lxmf.session import LxmfSession
+from medre.adapters.lxmf.session_context import (
+    LxmfDeliveryContext as _LxmfDeliveryObservationContext,
+)
+from medre.adapters.lxmf.worker_session import WorkerSession
+from medre.config.adapters.lxmf import LxmfConfig
 
 # Capabilities for the LXMF transport adapter.
 _LXMF_CAPABILITIES = AdapterCapabilities(

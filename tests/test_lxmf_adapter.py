@@ -9,12 +9,6 @@ import asyncio
 from datetime import datetime, timezone
 
 import pytest
-from medre.adapters.fakes.lxmf import FakeLxmfAdapter
-from medre.adapters.lxmf.adapter import LxmfAdapter
-from medre.adapters.lxmf.compat import HAS_LXMF
-from medre.adapters.lxmf.errors import LxmfConnectionError
-from medre.adapters.lxmf.event_shape import LXMF_NATIVE_SCHEMA_VERSION
-from medre.config.adapters.lxmf import LxmfConfig
 from medre.core.contracts.adapter import (
     AdapterHandoffResult,
     AdapterPermanentError,
@@ -25,6 +19,13 @@ from medre.core.events import CanonicalEvent, EventMetadata
 from medre.core.events.kinds import EventKind
 from medre.core.rendering.renderer import RenderingResult
 from medre_lxmf_tests.helpers.async_utils import wait_until
+
+from medre.adapters.fakes.lxmf import FakeLxmfAdapter
+from medre.adapters.lxmf.adapter import LxmfAdapter
+from medre.adapters.lxmf.compat import HAS_LXMF
+from medre.adapters.lxmf.errors import LxmfConnectionError
+from medre.adapters.lxmf.event_shape import LXMF_NATIVE_SCHEMA_VERSION
+from medre.config.adapters.lxmf import LxmfConfig
 
 
 def _make_config(**overrides) -> LxmfConfig:

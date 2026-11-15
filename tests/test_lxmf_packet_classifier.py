@@ -5,6 +5,7 @@ extraction, has_fields, direct message detection, and edge cases.
 from __future__ import annotations
 
 import pytest
+
 from medre.adapters.lxmf.errors import LxmfCodecError
 from medre.adapters.lxmf.packet_classifier import (
     LxmfPacketClassifier,

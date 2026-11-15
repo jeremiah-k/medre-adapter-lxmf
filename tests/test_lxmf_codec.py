@@ -8,14 +8,15 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from medre.adapters.lxmf.codec import LxmfCodec
-from medre.adapters.lxmf.errors import LxmfCodecError
-from medre.adapters.lxmf.fields import LxmfFieldsHelper
-from medre.config.adapters.lxmf import LxmfConfig
 from medre.core.events.canonical import CanonicalEvent, EventRelation, NativeRef
 from medre.core.events.kinds import EventKind
 from medre.core.routing.models import Route, RouteSource, RouteTarget
 from medre.core.routing.router import Router
+
+from medre.adapters.lxmf.codec import LxmfCodec
+from medre.adapters.lxmf.errors import LxmfCodecError
+from medre.adapters.lxmf.fields import LxmfFieldsHelper
+from medre.config.adapters.lxmf import LxmfConfig
 
 
 def _lxmf_data(event: CanonicalEvent) -> dict[str, object]:

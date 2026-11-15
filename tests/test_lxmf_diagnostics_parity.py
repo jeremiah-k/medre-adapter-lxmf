@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from medre.core.rendering.renderer import RenderingResult
+
 from medre.adapters.lxmf.adapter import LxmfAdapter
 from medre.config.adapters.lxmf import LxmfConfig
-from medre.core.rendering.renderer import RenderingResult
 
 
 def _config(adapter_id: str = "lxmf-diag-parity") -> LxmfConfig:

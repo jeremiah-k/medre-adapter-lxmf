@@ -564,8 +564,6 @@ async def _run_relation(base: Path) -> RelationResult:
 
     adapter = None
     try:
-        from medre.adapters.lxmf.adapter import LxmfAdapter
-        from medre.adapters.lxmf.renderer import LxmfRenderer
         from medre.core.events.canonical import (
             CanonicalEvent,
             EventRelation,
@@ -574,6 +572,9 @@ async def _run_relation(base: Path) -> RelationResult:
         from medre.core.events.kinds import EventKind
         from medre.core.events.metadata import EventMetadata
         from medre.core.rendering.renderer import RenderingContext
+
+        from medre.adapters.lxmf.adapter import LxmfAdapter
+        from medre.adapters.lxmf.renderer import LxmfRenderer
 
         adapter = LxmfAdapter(
             _relation_config(base, "a", "medre-relation-a", announce_interval=0),

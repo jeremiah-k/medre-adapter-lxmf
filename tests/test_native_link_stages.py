@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
 from types import SimpleNamespace
 
+import pytest
 from medre_lxmf_tests.helpers import native_chat_events
 from medre_lxmf_tests.helpers.native_chat_events import classify_inbound_timeout
 

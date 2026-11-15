@@ -203,10 +203,11 @@ async def test_rendered_title_and_envelope_count_toward_opportunistic_fallback(
     sample_event,
 ) -> None:
     """MEDRE's metadata overhead changes delivery method without losing payload."""
-    from medre.adapters.lxmf.fields import FIELD_MEDRE_ENVELOPE, LXMF_NAMESPACE
-    from medre.adapters.lxmf.renderer import LxmfRenderer
     from medre.core.rendering import RenderingContext
     from msgspec.structs import replace
+
+    from medre.adapters.lxmf.fields import FIELD_MEDRE_ENVELOPE, LXMF_NAMESPACE
+    from medre.adapters.lxmf.renderer import LxmfRenderer
 
     lxmf, rns = _load_sdks()
     event = replace(sample_event, payload={"body": "x" * 200, "title": "reply title"})

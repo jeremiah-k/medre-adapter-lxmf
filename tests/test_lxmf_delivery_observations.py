@@ -8,13 +8,14 @@ import time
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from medre.adapters.lxmf.adapter import LxmfAdapter
-from medre.adapters.lxmf.session import LxmfDeliveryState, LxmfSession
-from medre.config.adapters.lxmf import LxmfConfig
 from medre.core.contracts.adapter import AdapterContext
 from medre.core.events import DeliveryAttemptProvenance
 from medre.core.rendering.renderer import RenderingResult
 from medre_lxmf_tests.helpers.async_utils import wait_until
+
+from medre.adapters.lxmf.adapter import LxmfAdapter
+from medre.adapters.lxmf.session import LxmfDeliveryState, LxmfSession
+from medre.config.adapters.lxmf import LxmfConfig
 
 
 def _context(callback: AsyncMock) -> AdapterContext:

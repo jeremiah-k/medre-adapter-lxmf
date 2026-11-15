@@ -14,10 +14,11 @@ import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+from medre_lxmf_tests.helpers.async_utils import wait_until
+
 from medre.adapters.lxmf.adapter import LxmfAdapter
 from medre.adapters.lxmf.session import LxmfSession
 from medre.config.adapters.lxmf import LxmfConfig
-from medre_lxmf_tests.helpers.async_utils import wait_until
 
 
 def _make_config(**overrides) -> LxmfConfig:

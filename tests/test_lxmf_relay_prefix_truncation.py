@@ -12,12 +12,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
-
-from medre.adapters.lxmf.renderer import LxmfRenderer
 from medre.core.events import CanonicalEvent, EventMetadata
 from medre.core.events.metadata import NativeMetadata
 from medre.core.rendering.renderer import RenderingContext, RenderingResult
 from medre_lxmf_tests.helpers.lxmf_renderer import lxmf_renderer_with_prefix
+
+from medre.adapters.lxmf.renderer import LxmfRenderer
 
 
 def _make_event(
