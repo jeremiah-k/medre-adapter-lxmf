@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from medre_lxmf_tests.helpers import native_recovery
 from medre_lxmf_tests.helpers.native_chat_events import (
     command as _command,
     event as _event,
@@ -118,14 +119,17 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
                 )
                 await _command(peer, command="announce")
                 await _event(peer, "announced")
+                first_inbound = f"Hello from an LXMF chat {uuid.uuid4().hex} ☃"
                 await _submit(
                     peer,
                     destination=address,
-                    content="Hello from an LXMF chat ☃",
+                    content=first_inbound,
                 )
-                assert (await _inbound(inbound, peer, session))[
-                    "content"
-                ] == "Hello from an LXMF chat ☃"
+                assert (
+                    await _inbound(
+                        inbound, peer, session, expected_content=first_inbound
+                    )
+                )["content"] == first_inbound
                 await session.send_text(
                     peer_ready["address"], "[Alice/mesh] Reply through MEDRE ☃"
                 )
@@ -136,6 +140,11 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
                 native_state = await _event(peer, "status", token="before-stop")
                 assert native_state["attached"]
                 assert native_state["delivery_attempts"] >= 1
+                assert type(native_state["max_delivery_attempts"]) is int
+                assert (
+                    native_state["max_delivery_attempts"]
+                    >= native_state["delivery_attempts"]
+                )
             finally:
                 await session.stop()
 
@@ -222,14 +231,25 @@ async def test_shared_reticulum_chat_and_endpoint_restore(
 
                 if first_direction == "outbound":
                     await outbound_roundtrip()
-                await _submit(
-                    peer,
-                    destination=address,
-                    content="The same contact after restore",
+                # The restored worker may inherit a peer-side closed link. The
+                # SDK then spends one retry wait clearing it and one link
+                # establishment timeout on the first replacement handshake.
+                # Grant only the explicitly derived native recovery window;
+                # terminal native states still fail at the healthy deadline.
+                restored_inbound = (
+                    f"The same contact after restore {uuid.uuid4().hex} ☃"
                 )
-                assert (await _inbound(resumed_inbound, peer, resumed))[
-                    "content"
-                ] == "The same contact after restore"
+                await _submit(peer, destination=address, content=restored_inbound)
+                assert (
+                    await _inbound(
+                        resumed_inbound,
+                        peer,
+                        resumed,
+                        timeout=native_recovery.HEALTHY_DEADLINE_SECONDS,
+                        recovery_seconds=native_recovery.recovery_extension_seconds(),
+                        expected_content=restored_inbound,
+                    )
+                )["content"] == restored_inbound
                 if first_direction == "inbound":
                     await outbound_roundtrip()
             finally:

@@ -80,6 +80,20 @@ def main() -> None:
             # Inspect only this campaign's last submission; never alter the
             # cached link or routing state whose recovery is being qualified.
             target = last_message.get_destination().hash if last_message else None
+            state_name = (
+                {
+                    LXMF.LXMessage.GENERATING: "generating",
+                    LXMF.LXMessage.OUTBOUND: "outbound",
+                    LXMF.LXMessage.SENDING: "sending",
+                    LXMF.LXMessage.SENT: "sent",
+                    LXMF.LXMessage.DELIVERED: "delivered",
+                    LXMF.LXMessage.REJECTED: "rejected",
+                    LXMF.LXMessage.CANCELLED: "cancelled",
+                    LXMF.LXMessage.FAILED: "failed",
+                }.get(last_message.state)
+                if last_message
+                else None
+            )
             direct = router.direct_links.get(target)
             backchannel = router.backchannel_links.get(target)
             with announce_lock:
@@ -93,7 +107,16 @@ def main() -> None:
                 event="status",
                 token=request["token"],
                 message_state=last_message.state if last_message else None,
+                message_state_name=state_name,
+                message_terminal=(
+                    state_name in {"delivered", "failed", "rejected", "cancelled"}
+                    if last_message
+                    else None
+                ),
                 delivery_attempts=last_message.delivery_attempts if last_message else 0,
+                max_delivery_attempts=(
+                    router.attempt_limit(last_message) if last_message else None
+                ),
                 direct_link_status=direct.status if direct else None,
                 direct_link_active=direct is not None
                 and direct.status == RNS.Link.ACTIVE,

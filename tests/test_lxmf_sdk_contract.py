@@ -53,6 +53,18 @@ def test_lxmessage_requires_rns_destination_source() -> None:
         lxmf.LXMessage(destination, object(), "invalid-source")
 
 
+def test_native_attempt_limit_resolves_default_and_per_message_override() -> None:
+    lxmf, rns = _load_sdks()
+    message = lxmf.LXMessage(
+        _destination_stub(rns, 0x11), _destination_stub(rns, 0x22), "limit"
+    )
+    router = object.__new__(lxmf.LXMRouter)
+    assert message.max_delivery_attempts is None
+    assert router.attempt_limit(message) == lxmf.LXMRouter.MAX_DELIVERY_ATTEMPTS
+    message.max_delivery_attempts = 3
+    assert router.attempt_limit(message) == 3
+
+
 def test_lxmessage_constructor_accepts_medre_call_shape() -> None:
     """The constructor accepts the positional/keyword shape MEDRE actually uses."""
     lxmf, _ = _load_sdks()
