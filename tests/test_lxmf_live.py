@@ -54,6 +54,12 @@ Variable                    Description
                             tests (32-char hex string).
 ``LXMF_STORAGE_PATH``       Optional path for LXMF router storage.  Defaults
                             to ``/tmp/medre-live-lxmf-router``.
+``LXMF_RETICULUM_CONFIG_DIR``  Optional isolated Reticulum config directory.
+                            Required for RF-bound evidence: without it the
+                            session uses the process-default Reticulum
+                            config (typically AutoInterface). Must point
+                            to an existing, nonempty config file's directory.
+                            Selection alone does not prove the RF path.
 ``LXMF_LIVE_SEND``          Set to ``1`` to enable real outbound send tests.
                             Without this, tests that transmit real messages
                             are skipped.
@@ -123,6 +129,7 @@ from medre_lxmf_tests.helpers.live_harness import (
     bounded,
     live_env_status,
 )
+from medre_lxmf_tests.helpers.live_reticulum_config import resolve_live_config_dir
 
 # ---------------------------------------------------------------------------
 # Module-level marker — entire file is tagged "live" so it is excluded by the
@@ -146,6 +153,7 @@ LXMF_IDENTITY_PATH = os.environ.get("LXMF_IDENTITY_PATH", "")
 LXMF_DISPLAY_NAME = os.environ.get("LXMF_DISPLAY_NAME", "")
 LXMF_DESTINATION_HASH = os.environ.get("LXMF_DESTINATION_HASH", "")
 LXMF_STORAGE_PATH = os.environ.get("LXMF_STORAGE_PATH", "")
+LXMF_RETICULUM_CONFIG_DIR = os.environ.get("LXMF_RETICULUM_CONFIG_DIR", "")
 LXMF_LIVE_SEND = os.environ.get("LXMF_LIVE_SEND", "").strip() == "1"
 
 
@@ -194,7 +202,16 @@ require_live_send = pytest.mark.skipif(
 # Helpers
 # ---------------------------------------------------------------------------
 def _make_config():
-    """Build an LxmfConfig from the live environment variables."""
+    """Build an LxmfConfig from the live environment variables.
+
+    ``LXMF_RETICULUM_CONFIG_DIR`` selects an isolated Reticulum
+    configuration directory.  Without it the session would fall back to
+    the process-default Reticulum config (typically AutoInterface on the
+    LAN). An explicit profile is checked before native startup so a typo
+    cannot cause the SDK to create or select an unintended default profile.
+    The operator must independently establish that its active interfaces
+    are isolated and that RF is actually observed.
+    """
     from medre.config.adapters.lxmf import LxmfConfig
 
     return LxmfConfig(
@@ -203,6 +220,7 @@ def _make_config():
         identity_path=LXMF_IDENTITY_PATH or None,
         display_name=LXMF_DISPLAY_NAME,
         storage_path=LXMF_STORAGE_PATH or "/tmp/medre-live-lxmf-router",
+        reticulum_config_dir=resolve_live_config_dir(LXMF_RETICULUM_CONFIG_DIR),
     )
 
 
