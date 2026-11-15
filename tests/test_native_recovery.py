@@ -160,3 +160,44 @@ def test_recovery_budget_covers_the_stale_link_cycle():
     # The hosted failure delivered the same submission at 34.77 seconds.
     assert native_recovery.recovery_seconds() > 34.767872808
     assert native_recovery.recovery_seconds() <= 120
+
+
+async def test_recovery_extends_when_a_matching_announce_is_pending(monkeypatch):
+    # Path unknown and no usable link, but the peer observed the destination
+    # announce moments before the deadline: path learning is in progress, so
+    # the SDK-derived window observes the pending retry instead of failing.
+    _patch_peer(
+        monkeypatch,
+        _status(path_known=False, matching_announce_age_seconds=0.24),
+    )
+    queue = asyncio.Queue()
+
+    async def command(*args, **kwargs):
+        asyncio.get_running_loop().call_soon(queue.put_nowait, {"content": "exact"})
+
+    monkeypatch.setattr(native_chat_events, "command", command)
+
+    observed = await native_chat_events.inbound(
+        queue,
+        object(),
+        _Session(),
+        timeout=0,
+        recovery_seconds=1,
+        expected_content="exact",
+    )
+
+    assert observed == {"content": "exact"}
+
+
+async def test_recovery_refuses_when_no_matching_announce_was_seen(monkeypatch):
+    _patch_peer(monkeypatch, _status(path_known=False))
+
+    with pytest.raises(AssertionError, match="stage=destination_path_unavailable"):
+        await native_chat_events.inbound(
+            asyncio.Queue(),
+            object(),
+            _Session(),
+            timeout=0,
+            recovery_seconds=1,
+            expected_content="exact",
+        )
