@@ -77,6 +77,7 @@ from medre.adapters.lxmf.session import LxmfSession
 from medre.adapters.lxmf.session_context import (
     LxmfDeliveryContext as _LxmfDeliveryObservationContext,
 )
+from medre.adapters.lxmf.startup_info import build_startup_info
 from medre.adapters.lxmf.worker_session import WorkerSession
 from medre.config.adapters.lxmf import LxmfConfig
 
@@ -576,6 +577,27 @@ class LxmfAdapter(AdapterContract):
                 "deliveries_received": session_diag.deliveries_received,
             }
         return base
+
+    # -- Startup info -------------------------------------------------------
+
+    def startup_info(self) -> dict[str, Any]:
+        """Facts the adapter already holds, for core's startup block.
+
+        Core duck-types this callable at the ready transition and renders
+        the returned scalar facts; display ordering and caps are core's
+        business.  Pure read: no RNS or interface I/O, no resource
+        acquisition, no session mutation — the delivery-destination hash
+        is a single atomic attribute read of the bound session, safe to
+        call from any worker thread.  Facts not held yet (the delivery
+        hash before the delivery identity registers, or an RNS version
+        when the package is absent) are omitted rather than probed:
+        startup info never gates, blocks, or delays the interface.
+        """
+        session = self._session
+        destination_hash = (
+            session.delivery_destination_hash if session is not None else None
+        )
+        return build_startup_info(self._config, destination_hash=destination_hash)
 
     # -- Background task management -----------------------------------------
 

@@ -106,6 +106,16 @@ class WorkerSession:
         """Report a bounded status-probe timeout without killing active sends."""
         return self._status_delayed
 
+    @property
+    def delivery_destination_hash(self) -> bytes | None:
+        """Held hash of the worker's registered delivery destination.
+
+        ``None`` until the worker reports a ready state carrying one.
+        A single atomic attribute read — worker threads see either the
+        previous or the new value, never a torn one.
+        """
+        return self._delivery_destination_hash
+
     def set_health_callback(self, callback: Callable[[], None] | None) -> None:
         """Observe local worker/router facts without sending native status requests."""
         self._health_callback = callback
