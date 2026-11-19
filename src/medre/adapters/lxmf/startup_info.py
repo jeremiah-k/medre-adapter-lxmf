@@ -4,8 +4,7 @@ Core's runtime duck-types an optional ``startup_info()`` callable on a
 built adapter and renders the returned scalar facts at the adapter's
 ready transition (see the adapter-startup-info specification in the
 core distribution).  This module shapes the facts this adapter holds at
-that transition — the adapter's own LXMF delivery-destination hash
-prefix, once the session has registered the delivery identity, and the
+that transition — the adapter's own LXMF delivery-destination hash, once the session has registered the delivery identity, and the
 configured transport mode — into the plain mapping the contract
 expects.
 
@@ -31,9 +30,8 @@ from medre.config.adapters.lxmf import LxmfConfig
 
 __all__ = ["build_startup_info"]
 
-# The adapter's own display convention for destination hashes: session
-# announce logs show the first 16 hex characters of the delivery hash.
-_DESTINATION_PREFIX_CHARS = 16
+# LXMF destinations use Reticulum's 128-bit destination hashes.
+_DESTINATION_BYTES = 16
 
 
 def _installed_rns_version() -> str | None:
@@ -49,13 +47,6 @@ def _installed_rns_version() -> str | None:
         return None
 
 
-def _destination_hash_prefix(destination_hash: bytes | None) -> str | None:
-    """Hex-prefix display form of the held delivery destination hash."""
-    if not destination_hash:
-        return None
-    return destination_hash.hex()[:_DESTINATION_PREFIX_CHARS]
-
-
 def build_startup_info(
     config: LxmfConfig,
     *,
@@ -66,18 +57,17 @@ def build_startup_info(
     ``destination_hash`` is the adapter's own LXMF delivery-destination
     hash once the session has registered the delivery identity; it is
     omitted when not held (fake mode never registers one).  The
-    destination prefix forms the first row and the configured transport
+    destination address forms the first row and the configured transport
     facts the second, per the contract's row guidance.
     """
     rows: list[list[dict[str, Any]]] = []
-    prefix = _destination_hash_prefix(destination_hash)
-    if prefix:
+    if destination_hash is not None and len(destination_hash) == _DESTINATION_BYTES:
         rows.append(
             [
                 {
-                    "name": "destination_hash_prefix",
-                    "value": prefix,
-                    "label": "dest",
+                    "name": "destination_hash",
+                    "value": destination_hash.hex(),
+                    "label": "destination",
                 }
             ]
         )

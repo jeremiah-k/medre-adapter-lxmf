@@ -4,7 +4,7 @@ Covers:
 - ``startup_info`` is discovered duck-typed on the adapter object (real
   and fake).
 - Facts come only from already-held state: the configured connection
-  type, the adapter's own LXMF delivery-destination hash prefix once
+  type, the adapter's own LXMF delivery-destination hash once
   the session has registered the delivery identity, and the installed
   RNS distribution version read via ``importlib.metadata`` (never a
   source literal — the pin-hygiene guard keeps pins in pyproject only).
@@ -13,7 +13,7 @@ Covers:
   omitted, never probed.
 - Pure read: calling the hook mutates no adapter or session state and
   is safe on a worker thread, matching core's off-loop invocation.
-- The 16-character destination prefix renders in full through core's
+- The full destination renders through core's
   redaction boundary (a published mesh identifier below the generic
   long-key threshold, matching the session's own log convention).
 
@@ -46,11 +46,11 @@ from medre.config.adapters.lxmf import LxmfConfig
 
 _EMITTED_AT = "2026-11-19T00:00:00+00:00"
 
-# Synthetic delivery destination hash: 16 bytes.  The displayed prefix
+# Synthetic delivery destination hash: 16 bytes.  The displayed destination
 # is the first 16 hex characters, matching the session's announce-log
 # convention.
 _SYNTHETIC_HASH = bytes.fromhex("a1b2c3d4e5f60718" "9988776655443322")
-_EXPECTED_PREFIX = "a1b2c3d4e5f60718"
+_EXPECTED_DESTINATION = _SYNTHETIC_HASH.hex()
 
 # Synthetic RNS version for deterministically exercising the held
 # version fact.  Not a pin value; the repo pins live in pyproject only.
@@ -140,7 +140,7 @@ def test_fresh_adapter_omits_unheld_facts() -> None:
 async def test_held_destination_hash_forms_first_row(
     monkeypatch: pytest.MonkeyPatch, make_adapter_context
 ) -> None:
-    """The session's own delivery-destination prefix leads the rows."""
+    """The session's own delivery destination leads the rows."""
     monkeypatch.setattr(startup_info_module, "_installed_rns_version", lambda: None)
     adapter = await _started_adapter(_make_config(), make_adapter_context)
     try:
@@ -149,9 +149,9 @@ async def test_held_destination_hash_forms_first_row(
             "rows": [
                 [
                     {
-                        "name": "destination_hash_prefix",
-                        "value": _EXPECTED_PREFIX,
-                        "label": "dest",
+                        "name": "destination_hash",
+                        "value": _EXPECTED_DESTINATION,
+                        "label": "destination",
                     }
                 ],
                 [{"name": "connection_type", "value": "fake", "label": "link"}],
@@ -159,6 +159,13 @@ async def test_held_destination_hash_forms_first_row(
         }
     finally:
         await adapter.stop()
+
+
+def test_invalid_destination_hash_is_omitted(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(startup_info_module, "_installed_rns_version", lambda: None)
+    assert startup_info_module.build_startup_info(
+        _make_config(), destination_hash=b"invalid"
+    ) == {"rows": [_endpoint_row(None)]}
 
 
 async def test_rns_version_fact_is_reported_when_module_holds_one(
@@ -177,9 +184,9 @@ async def test_rns_version_fact_is_reported_when_module_holds_one(
             "rows": [
                 [
                     {
-                        "name": "destination_hash_prefix",
-                        "value": _EXPECTED_PREFIX,
-                        "label": "dest",
+                        "name": "destination_hash",
+                        "value": _EXPECTED_DESTINATION,
+                        "label": "destination",
                     }
                 ],
                 _endpoint_row(_SYNTHETIC_RNS_VERSION),
@@ -285,8 +292,8 @@ def test_adapter_and_fake_import_the_shared_builder() -> None:
 async def test_started_adapter_emits_held_facts_through_core(
     monkeypatch: pytest.MonkeyPatch, make_adapter_context
 ) -> None:
-    """Core's supervised collection preserves rows and renders the prefix
-    in full — a published mesh identifier, not key material."""
+    """Core's supervised collection preserves rows and renders the full address
+    — a published mesh identifier, not key material."""
     monkeypatch.setattr(startup_info_module, "_installed_rns_version", lambda: None)
     adapter = await _started_adapter(_make_config(), make_adapter_context)
     try:
@@ -296,13 +303,15 @@ async def test_started_adapter_emits_held_facts_through_core(
         )
         assert info is not None
         assert [(f.name, f.row, f.label) for f in info.fields] == [
-            ("destination_hash_prefix", 0, "dest"),
+            ("destination_hash", 0, "destination"),
             ("connection_type", 1, "link"),
         ]
-        assert info.fields[0].value == _EXPECTED_PREFIX
+        assert info.fields[0].value == _EXPECTED_DESTINATION
         assert info.fields[1].value == "fake"
         assert render_startup_info_block("lxmf.lxmf-1  ready", info) == (
-            "lxmf.lxmf-1  ready\n" f"  dest {_EXPECTED_PREFIX}\n" "  link fake"
+            "lxmf.lxmf-1  ready\n"
+            f"  destination {_EXPECTED_DESTINATION}\n"
+            "  link fake"
         )
     finally:
         await adapter.stop()
