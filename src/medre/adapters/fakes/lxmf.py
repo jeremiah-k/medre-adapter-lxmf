@@ -51,6 +51,7 @@ from medre.core.rendering.renderer import RenderingResult
 from medre.adapters.lxmf.codec import LxmfCodec
 from medre.adapters.lxmf.event_shape import LXMF_NATIVE_SCHEMA_VERSION
 from medre.adapters.lxmf.packet_classifier import LxmfPacketClassifier
+from medre.adapters.lxmf.startup_info import build_startup_info
 from medre.config.adapters.lxmf import LxmfConfig
 
 _logger = logging.getLogger(__name__)
@@ -269,6 +270,14 @@ class FakeLxmfAdapter(AdapterContract):
             "delivered_count": len(self.delivered_payloads),
             "inbound_count": len(self.inbound_events),
         }
+
+    def startup_info(self) -> dict[str, Any]:
+        """Startup facts mirroring the real adapter's pure-read provider.
+
+        The fake owns no session, so no delivery-destination hash is
+        ever reported; only configured transport facts appear.
+        """
+        return build_startup_info(self._config)
 
     # -- Outbound delivery --------------------------------------------------
 

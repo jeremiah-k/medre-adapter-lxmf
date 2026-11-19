@@ -684,6 +684,16 @@ class LxmfSession:
         """Human-readable description of the last announce error."""
         return self._diag.last_announce_error
 
+    @property
+    def delivery_destination_hash(self) -> bytes | None:
+        """Held hash of the registered local delivery destination.
+
+        ``None`` until the delivery identity registers (fake mode never
+        registers one).  A single atomic attribute read — worker threads
+        see either the previous or the new value, never a torn one.
+        """
+        return self._delivery_destination_hash
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
